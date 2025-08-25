@@ -21,7 +21,6 @@ function generate_clients {
 
 EOF
   done
-  echo "$clients"
 }
 
 cat > "$FILENAME" <<EOF
