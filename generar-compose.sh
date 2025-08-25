@@ -4,9 +4,9 @@ FILENAME=$1
 CLIENTS_COUNT=$2
 
 function generate_clients {
-    local clients=""
-    for i in $(seq 1 $1); do
-      clients+="
+  local clients=""
+  for i in $(seq 1 $1); do
+      cat <<EOF
   client$i:
     container_name: client$i
     image: client:latest
@@ -18,12 +18,14 @@ function generate_clients {
       - testing_net
     depends_on:
       - server
-"
-    done
-    echo "$clients"
+
+EOF
+  done
+  echo "$clients"
 }
 
-DOCKER_COMPOSE="name: tp0
+cat > "$FILENAME" <<EOF
+name: tp0
 services:
   server:
     container_name: server
@@ -34,6 +36,7 @@ services:
       - LOGGING_LEVEL=DEBUG
     networks:
       - testing_net
+
 $(generate_clients $CLIENTS_COUNT)
 
 networks:
@@ -41,6 +44,5 @@ networks:
     ipam:
       driver: default
       config:
-        - subnet: 172.25.125.0/24"
-
-echo "$DOCKER_COMPOSE" > "$FILENAME"
+        - subnet: 172.25.125.0/24
+EOF
