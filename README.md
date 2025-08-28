@@ -201,3 +201,10 @@ Arguments:
 
 Example: ./generar-compose.sh docker-compose.yml 3
 ```
+
+## Ejercicio 2
+
+A lo desarrollado al ejercicio 1 se bindean los archivos de configuracion a través de volúmenes para que no sean incluidos en la imagen.
+De esta manera, se pueden modificar estos archivos y la imagen no tiene que volver a construirse para que tengan efecto (aunque si es necesario reiniciar).
+
+En cada `.dockerignore` está agregado el archivo de configuración para confirmar que no se utiliza. Además, en el cliente se quitó el `COPY` que pasaba este archivo.
