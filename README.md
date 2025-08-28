@@ -181,7 +181,7 @@ La corrección personal tendrá en cuenta la calidad del código entregado y cas
 
 
 # Resolución de ejercicios
-# Ejercicio 1
+## Ejercicio 1
 
 Existe un bash script `generar-compose.sh` que recibe:
 - Nombre de archivo de salida YAML
