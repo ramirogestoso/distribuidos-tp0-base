@@ -208,3 +208,17 @@ A lo desarrollado al ejercicio 1 se bindean los archivos de configuracion a trav
 De esta manera, se pueden modificar estos archivos y la imagen no tiene que volver a construirse para que tengan efecto (aunque si es necesario reiniciar).
 
 En cada `.dockerignore` está agregado el archivo de configuración para confirmar que no se utiliza. Además, en el cliente se quitó el `COPY` que pasaba este archivo.
+
+## Ejercicio 3
+
+Existe un bash script `validar-echo-server.sh` que verifica que el servidor funcione correctamente.
+
+Corre un contenedor de docker a partir de la imagen `alpine` conectado a la red definida en el `docker-compose-dev.yaml` llamada `tp0_testing_net` y ejecuta un netcat contra la dirección `server` en el puerto `12345`: `echo "$MSG" | nc server 12345`
+
+El mensaje enviado no es relevante, sino que verificamos que vuelva el mismo desde el servidor.
+
+Fue necesario levantar un contenedor (liviano) para acceder a la red de docker y poder usar su dns para resolver `server`*. Además, no nos interesa exponer el servicio fuera de esa red.
+
+Al finalizar, el contenedor se elimina automaticamente gracias al flag `--rm` de `docker run`.
+
+*Si bien es posible encontrar la ip del servidor a traves de comandos de docker y pegarle desde el host, no es el camino que queremos tomar.
