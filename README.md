@@ -213,7 +213,7 @@ En cada `.dockerignore` está agregado el archivo de configuración para confirm
 
 Existe un bash script `validar-echo-server.sh` que verifica que el servidor funcione correctamente.
 
-Corre un contenedor de docker a partir de la imagen `alpine` conectado a la red definida en el `docker-compose-dev.yaml` llamada `tp0_testing_net` y ejecuta un netcat contra la dirección `server` en el puerto `12345`: `echo "$MSG" | nc server 12345`
+Corre un contenedor de docker a partir de la imagen `busybox` conectado a la red definida en el `docker-compose-dev.yaml` llamada `tp0_testing_net` y ejecuta un netcat contra la dirección `server` en el puerto `12345`: `echo "$MSG" | nc server 12345`
 
 El mensaje enviado no es relevante, sino que verificamos que vuelva el mismo desde el servidor.
 
