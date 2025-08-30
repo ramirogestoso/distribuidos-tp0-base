@@ -1,5 +1,6 @@
 import socket
 import logging
+import signal
 
 
 class Server:
@@ -8,6 +9,9 @@ class Server:
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
+        # Signal control
+        self._running = True
+        signal.signal(signal.SIGTERM, self.__exit_gracefully)
 
     def run(self):
         """
@@ -18,9 +22,7 @@ class Server:
         finishes, servers starts to accept new connections again
         """
 
-        # TODO: Modify this program to handle signal to graceful shutdown
-        # the server
-        while True:
+        while self._running:
             client_sock = self.__accept_new_connection()
             self.__handle_client_connection(client_sock)
 
@@ -39,7 +41,8 @@ class Server:
             # TODO: Modify the send to avoid short-writes
             client_sock.send("{}\n".format(msg).encode('utf-8'))
         except OSError as e:
-            logging.error("action: receive_message | result: fail | error: {e}")
+            if self._running:
+                logging.error(f"action: receive_message | result: fail | error: {e}")
         finally:
             client_sock.close()
 
@@ -56,3 +59,13 @@ class Server:
         c, addr = self._server_socket.accept()
         logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
         return c
+
+    def __exit_gracefully(self, signum, frame):
+        """
+        Exit the server gracefully
+
+        This function is called when the server receives a termination
+        signal. It closes the server sockets and exits the program.
+        """
+        self._running = False
+        self._server_socket.close()
