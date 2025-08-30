@@ -87,3 +87,10 @@ func (c *Client) StartClientLoop() {
 	}
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
 }
+
+// StopClient Stops the client by closing the connection
+func (c *Client) StopClient() {
+	if c.conn != nil {
+		c.conn.Close()
+	}
+}
