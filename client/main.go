@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"os/signal"
@@ -94,8 +93,9 @@ func PrintConfig(v *viper.Viper) {
 }
 
 func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM)
-	defer stop()
+	done := make(chan bool, 1)
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGTERM)
 
 	v, err := InitConfig()
 	if err != nil {
@@ -117,8 +117,14 @@ func main() {
 	}
 
 	client := common.NewClient(clientConfig)
-	go client.StartClientLoop()
+	go func() {
+		client.StartClientLoop()
+		done <- true
+	}()
 
-	<-ctx.Done()
-	client.StopClient()
+	select {
+	case <-signals:
+		client.StopClient()
+	case <-done:
+	}
 }
