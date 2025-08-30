@@ -222,3 +222,27 @@ Fue necesario levantar un contenedor (liviano) para acceder a la red de docker y
 Al finalizar, el contenedor se elimina automaticamente gracias al flag `--rm` de `docker run`.
 
 *Si bien es posible encontrar la ip del servidor a traves de comandos de docker y pegarle desde el host, no es el camino que queremos tomar.
+
+## Ejercicio 4
+
+### Server
+
+En `server.py` agregamos el método `stop` para liberar los recursos utilizados. Para ello agregamos una referencia del socket del cliente actual.
+
+Cuando nos encontramos un error del tipo `OSError` y el servidor está frenado, no propagamos más la excepción.
+
+En `main.py` agregamos un manejador de señales que, por ahora, escucha `SIGTERM` y ejecuta un stop del server.
+
+### Cliente
+
+En `client.go` agregamos el método `StopClient` para liberar los recursos utilizados en ese momento.
+
+En `main.go` agregamos un notificador de señales para avisarnos por medio de un channel cuando llegue una señal `SIGTERM`.
+
+El client loop se ejecutará en una rutina de go, notificando por otro channel cuando termine.
+
+De esta manera:
+- Si el client loop termina exitosamente, el channel `done` se popula y el proceso termina
+- Si llega una señal `SIGTERM` durante el client loop, el channel `signals` se popula y ejecuta un `StopClient` para luego terminar exitosamente
+
+Así ante cada escenario el cliente no termina con errores.
