@@ -53,29 +53,28 @@ func (c *Client) createClientSocket() error {
 func (c *Client) StartClientLoop() {
 	// There is an autoincremental msgID to identify every message sent
 	// Messages if the message amount threshold has not been surpassed
-	for msgID := 1; msgID <= c.config.LoopAmount; msgID++ {
-		c.createClientSocket()
-		c.SendBet(msgID)
-		c.StopClient()
-		// Wait a time between sending one message and the next one
-		time.Sleep(c.config.LoopPeriod)
-
-	}
-	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
-}
-
-func (c *Client) SendBet(msgID int) {
-	var bet *protocol.Bet
-	bet = &protocol.Bet{
+	// for msgID := 1; msgID <= c.config.LoopAmount; msgID++ {
+	var bet = protocol.Bet{
 		Agency:    1,
 		FirstName: "John",
 		LastName:  "Doe",
 		Document:  "123456789",
 		Birthdate: "1990-01-01",
-		Number:    msgID,
+		Number:    1,
 	}
+	c.createClientSocket()
+	c.SendBet(&bet)
+	c.StopClient()
+	// Wait a time between sending one message and the next one
+	// time.Sleep(c.config.LoopPeriod)
 
-	jsonMessage, err := bet.ToJsonMessage()
+	// }
+	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
+}
+
+func (c *Client) SendBet(b *protocol.Bet) {
+
+	jsonMessage, err := b.ToJsonMessage()
 	if err != nil {
 		logError("create_json_message", c.config.ID, err)
 		return
@@ -92,7 +91,7 @@ func (c *Client) SendBet(msgID int) {
 		logError("receive_message", c.config.ID, err)
 		return
 	}
-	bet, err = protocol.JsonMessageToBet(jsonMessage)
+	bet, err := protocol.JsonMessageToBet(jsonMessage)
 
 	if err != nil {
 		logError("receive_message", c.config.ID, err)
