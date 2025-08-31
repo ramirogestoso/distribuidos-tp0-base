@@ -1,6 +1,8 @@
 import socket
 import logging
 
+from protocol.message import BetMessage
+
 class Server:
     def __init__(self, port, listen_backlog):
         # Initialize server socket
@@ -35,12 +37,11 @@ class Server:
         client socket will also be closed
         """
         try:
-            # TODO: Modify the receive to avoid short-reads
-            msg = client_sock.recv(1024).rstrip().decode('utf-8')
+            msg = BetMessage.read_from(client_sock)
+            bet = msg.to_class()
             addr = client_sock.getpeername()
-            logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {msg}')
-            # TODO: Modify the send to avoid short-writes
-            client_sock.send("{}\n".format(msg).encode('utf-8'))
+            logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {msg} | bet: {bet}')
+            msg.write_to(client_sock)
         except OSError as e:
             logging.error(f"action: receive_message | result: fail | error: {e}")
         finally:
