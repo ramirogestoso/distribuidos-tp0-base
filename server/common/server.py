@@ -2,6 +2,7 @@ import socket
 import logging
 
 from protocol.message import BetMessage
+from common.utils import store_bets
 
 class Server:
     def __init__(self, port, listen_backlog):
@@ -39,8 +40,8 @@ class Server:
         try:
             msg = BetMessage.read_from(client_sock)
             bet = msg.to_class()
-            addr = client_sock.getpeername()
-            logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {msg} | bet: {bet}')
+            store_bets([bet])
+            logging.info(f'action: apuesta_almacenada | result: success | dni: {bet.document} | numero: {bet.number}')
             msg.write_to(client_sock)
         except OSError as e:
             logging.error(f"action: receive_message | result: fail | error: {e}")
