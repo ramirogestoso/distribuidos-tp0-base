@@ -246,3 +246,56 @@ De esta manera:
 - Si llega una señal `SIGTERM` durante el client loop, el channel `signals` se popula y ejecuta un `StopClient` para luego terminar exitosamente
 
 Así ante cada escenario el cliente no termina con errores.
+
+## Ejercicio 5
+
+### Protocolo
+
+`|payload_length|payload_json|`
+
+- payload_length: header de 4 bytes para indicar el tamaño del payload
+- payload_json: payload de tamaño variable en formato `json`
+
+1. Leer 4 bytes que significan el tamaño en bytes del payload enviado
+2. Convertir a `int` (big endian)
+3. Leer esa cantidad de bytes e intepretar como `json`
+
+De esta forma, se puede enviar un `json` con cualquier contenido. En nuestro caso, ese contenido es una apuesta entonces sabemos como interpretarlo.
+
+De todos modos, puede funcionar de forma generica y tener muchos propositos si agregamos mas información al `json` y acordamos entre las partes como van a ser esos `json` enviados.
+
+#### Apuestas
+
+En nuestro caso, enviamos cada apuesta como `json` y el servidor espera recibir una apuesta por conexión (se planea una mejora a futuro sobre esto).
+
+Asi, el flujo queda:
+```ascii
++-------------------+                  +-------------------+
+|                   |                  |                   |
+|     CLIENTE       |                  |     SERVIDOR      |
+|                   |                  |                   |
++-------------------+                  |   (LISTEN TCP)    |
++-------------------+                  +-------------------+
+          |                                      |
+          |------------- CONNECT --------------->|
+          |                                      |
+          |----- ENVIAR(APUESTA/JSON) ---------->|
+          |                                      |
+          |                                      |--- RECIBIR_DATOS --->
+          |                                      |--- PARSEAR_JSON ---->
+          |                                      |--- STORE_BETS ------->
+          |<---- DEVOLVER(APUESTA RECIBIDA) -----|
+          |                                      |
+          |----------- CERRAR_SOCKET ----------->|
+          |                                      |
+          |<---------- CERRAR_SOCKET ------------|
+          |                                      |
++-------------------+                  +-------------------+
+|   CLIENTE FIN     |                  | SERVIDOR SIGUE EN |
+|                   |                  |      LISTEN       |
++-------------------+                  +-------------------+
+```
+
+Como observación, el servidor deja de ser un `echo server` en este ejercicio ya que espera recibir mensajes por medio del protocolo creado.
+
+Por el momento, el protocolo solamente es capaz de enviar y recibir apuestas.
