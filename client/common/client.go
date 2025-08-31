@@ -55,12 +55,12 @@ func (c *Client) StartClientLoop() {
 	// Messages if the message amount threshold has not been surpassed
 	// for msgID := 1; msgID <= c.config.LoopAmount; msgID++ {
 	var bet = protocol.Bet{
-		Agency:    1,
+		Agency:    c.config.ID,
 		FirstName: "John",
 		LastName:  "Doe",
 		Document:  "123456789",
 		Birthdate: "1990-01-01",
-		Number:    1,
+		Number:    "1",
 	}
 	c.createClientSocket()
 	c.SendBet(&bet)

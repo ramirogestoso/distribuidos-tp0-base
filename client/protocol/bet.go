@@ -5,12 +5,12 @@ import (
 )
 
 type Bet struct {
-	Agency    int    `json:"agency"`
+	Agency    string `json:"agency"`
 	FirstName string `json:"first_name"`
 	LastName  string `json:"last_name"`
 	Document  string `json:"document"`
 	Birthdate string `json:"birthdate"`
-	Number    int    `json:"number"`
+	Number    string `json:"number"`
 }
 
 func (b *Bet) ToJsonMessage() (*JsonMessage, error) {
