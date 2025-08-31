@@ -10,7 +10,7 @@ class JsonMessage:
     def __init__(self, json_content: str):
         self.json_content = json_content
 
-    def write(self, stream) -> int:
+    def write_to(self, stream) -> int:
         payload = self.json_content.encode("utf-8")
         length = len(payload).to_bytes(LENGTH_BYTES, byteorder='big')
         stream.sendall(length)
@@ -18,14 +18,10 @@ class JsonMessage:
         return LENGTH_BYTES + len(payload)
 
     @classmethod
-    def read(cls, stream):
+    def read_from(cls, stream):
         length_bytes = cls._recv_exact(stream, LENGTH_BYTES)
-        if not length_bytes:
-            raise ConnectionError("Stream closed before receiving length")
-        length = int.from_bytes(length_bytes, byteorder='big')
-        payload = cls._recv_exact(stream, length)
-        if not payload:
-            raise ConnectionError("Stream closed before receiving payload")
+        payload_length = int.from_bytes(length_bytes, byteorder='big')
+        payload = cls._recv_exact(stream, payload_length)
         return cls(payload.decode("utf-8"))
 
     @staticmethod
@@ -34,7 +30,7 @@ class JsonMessage:
         while len(data) < n:
             chunk = stream.recv(n - len(data))
             if not chunk:
-                return None
+                raise ConnectionError(f"Stream closed while expecting {n} bytes, got {len(data)}")
             data += chunk
         return data
 
@@ -43,16 +39,5 @@ class JsonMessage:
 
 
 class BetMessage(JsonMessage):
-    def __init__(self, bet: Bet):
-        content = {
-            "agency": str(bet.agency),
-            "first_name": bet.first_name,
-            "last_name": bet.last_name,
-            "document": bet.document,
-            "birthdate": bet.birthdate.isoformat(),
-            "number": str(bet.number)
-        }
-        super().__init__(json.dumps(content))
-
     def to_class(self) -> Bet:
         return super().to_class(Bet)
