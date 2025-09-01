@@ -39,7 +39,7 @@ class Server:
         """
         try:
             msg = BetMessage.read_from(client_sock)
-            bet = msg.to_class()
+            bet = msg.to_bet()
             store_bets([bet])
             logging.info(f'action: apuesta_almacenada | result: success | dni: {bet.document} | numero: {bet.number}')
             msg.write_to(client_sock)

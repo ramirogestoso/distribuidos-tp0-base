@@ -76,27 +76,15 @@ func (c *Client) StartClientLoop() {
 	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
 }
 
-func (c *Client) SendBet(b *protocol.Bet) {
+func (c *Client) SendBet(bet *protocol.Bet) {
 
-	jsonMessage, err := b.ToJsonMessage()
-	if err != nil {
-		logError("create_json_message", c.config.ID, err)
-		return
-	}
-
-	_, err = jsonMessage.Write(c.conn)
+	_, err := bet.ToMessage().WriteTo(c.conn)
 	if err != nil {
 		logError("send_message", c.config.ID, err)
 		return
 	}
 
-	jsonMessage, err = protocol.ReadJsonMessage(c.conn)
-	if err != nil {
-		logError("receive_message", c.config.ID, err)
-		return
-	}
-	bet, err := protocol.JsonMessageToBet(jsonMessage)
-
+	bet, err = protocol.BetReadFrom(c.conn)
 	if err != nil {
 		logError("receive_message", c.config.ID, err)
 		return

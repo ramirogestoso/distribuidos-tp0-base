@@ -1,30 +1,42 @@
 package protocol
 
 import (
-	"encoding/json"
+	"io"
 )
 
+const BET_LENGTH_BYTES = 4 + 30 + 20 + 8 + 10 + 4
+
 type Bet struct {
-	Agency    string `json:"agency"`
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
-	Document  string `json:"document"`
-	Birthdate string `json:"birthdate"`
-	Number    string `json:"number"`
+	Agency    string
+	FirstName string
+	LastName  string
+	Document  string
+	Birthdate string
+	Number    string
 }
 
-func (b *Bet) ToJsonMessage() (*JsonMessage, error) {
-	data, err := json.Marshal(b)
+func (b *Bet) ToMessage() *Message {
+	data := make([]byte, 76)
+	copy(data[0:4], b.Agency)
+	copy(data[4:34], b.FirstName)
+	copy(data[34:54], b.LastName)
+	copy(data[54:62], b.Document)
+	copy(data[62:72], b.Birthdate)
+	copy(data[72:76], b.Number)
+	return &Message{Data: data}
+}
+
+func BetReadFrom(r io.Reader) (*Bet, error) {
+	msg, err := ReadMessage(r, BET_LENGTH_BYTES)
 	if err != nil {
 		return nil, err
 	}
-	return &JsonMessage{JsonContent: data}, nil
-}
-
-func JsonMessageToBet(message *JsonMessage) (*Bet, error) {
-	var bet Bet
-	if err := json.Unmarshal(message.JsonContent, &bet); err != nil {
-		return nil, err
-	}
-	return &bet, nil
+	return &Bet{
+		Agency:    string(msg.Data[0:4]),
+		FirstName: string(msg.Data[4:34]),
+		LastName:  string(msg.Data[34:54]),
+		Document:  string(msg.Data[54:62]),
+		Birthdate: string(msg.Data[62:72]),
+		Number:    string(msg.Data[72:76]),
+	}, nil
 }

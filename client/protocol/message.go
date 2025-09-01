@@ -1,14 +1,11 @@
 package protocol
 
 import (
-	"encoding/binary"
 	"io"
 )
 
-const LENGTH_BYTES = 4
-
-type JsonMessage struct {
-	JsonContent []byte
+type Message struct {
+	Data []byte
 }
 
 func WriteFull(w io.Writer, buf []byte) error {
@@ -26,30 +23,17 @@ func WriteFull(w io.Writer, buf []byte) error {
 	return nil
 }
 
-func (message *JsonMessage) Write(w io.Writer) (uint32, error) {
-	jsonLength := uint32(len(message.JsonContent))
-	length := make([]byte, LENGTH_BYTES)
-	binary.BigEndian.PutUint32(length, jsonLength)
-
-	if err := WriteFull(w, length); err != nil {
+func (message *Message) WriteTo(w io.Writer) (int64, error) {
+	if err := WriteFull(w, message.Data); err != nil {
 		return 0, err
 	}
-	if err := WriteFull(w, message.JsonContent); err != nil {
-		return 0, err
-	}
-	return jsonLength, nil
+	return int64(len(message.Data)), nil
 }
 
-func ReadJsonMessage(r io.Reader) (*JsonMessage, error) {
-	lengthBytes := make([]byte, LENGTH_BYTES)
-	if _, err := io.ReadFull(r, lengthBytes); err != nil {
+func ReadMessage(r io.Reader, size int) (*Message, error) {
+	data := make([]byte, size)
+	if _, err := io.ReadFull(r, data); err != nil {
 		return nil, err
 	}
-	length := binary.BigEndian.Uint32(lengthBytes)
-
-	payload := make([]byte, length)
-	if _, err := io.ReadFull(r, payload); err != nil {
-		return nil, err
-	}
-	return &JsonMessage{JsonContent: payload}, nil
+	return &Message{Data: data}, nil
 }

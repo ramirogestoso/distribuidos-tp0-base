@@ -1,43 +1,46 @@
-import json
+from abc import ABC, abstractmethod
 from common.utils import Bet
-from typing import TypeVar, Type
 
-T = TypeVar('T')
+# agency, first_name, last_name, documento, date, number
+BET_LENGTH_BYTES = 4 + 30 + 20 + 8 + 10 + 4
 
-LENGTH_BYTES = 4
+class Message(ABC):
+    def __init__(self, message: bytes):
+        self.message = message
 
-class JsonMessage:
-    def __init__(self, json_content: str):
-        self.json_content = json_content
+    def write_to(self, stream):
+        stream.sendall(self.message)
 
-    def write_to(self, stream) -> int:
-        payload = self.json_content.encode("utf-8")
-        length = len(payload).to_bytes(LENGTH_BYTES, byteorder='big')
-        stream.sendall(length)
-        stream.sendall(payload)
-        return LENGTH_BYTES + len(payload)
+    @abstractmethod
+    def read_from(cls, stream):
+        raise NotImplementedError()
 
+
+class BetMessage(Message):
     @classmethod
     def read_from(cls, stream):
-        length_bytes = cls._recv_exact(stream, LENGTH_BYTES)
-        payload_length = int.from_bytes(length_bytes, byteorder='big')
-        payload = cls._recv_exact(stream, payload_length)
-        return cls(payload.decode("utf-8"))
-
-    @staticmethod
-    def _recv_exact(stream, n: int) -> bytes:
-        data = b""
-        while len(data) < n:
-            chunk = stream.recv(n - len(data))
-            if not chunk:
-                raise ConnectionError(f"Stream closed while expecting {n} bytes, got {len(data)}")
-            data += chunk
-        return data
-
-    def to_class(self, cls: Type[T]) -> T:
-        return cls(**json.loads(self.json_content))
+        message = _recv_exact(stream, BET_LENGTH_BYTES)
+        return cls(message)
+    
+    def to_bet(self):
+        msg = self.message
+        agency = _decode(msg[0:4])
+        first_name = _decode(msg[4:34])
+        last_name = _decode(msg[34:54])
+        documento = _decode(msg[54:62])
+        date = _decode(msg[62:72])
+        number = _decode(msg[72:76])
+        return Bet(agency, first_name, last_name, documento, date, number)
 
 
-class BetMessage(JsonMessage):
-    def to_class(self) -> Bet:
-        return super().to_class(Bet)
+def _recv_exact(stream, n: int) -> bytes:
+    data = b""
+    while len(data) < n:
+        chunk = stream.recv(n - len(data))
+        if not chunk:
+            raise ConnectionError(f"Stream closed while expecting {n} bytes, got {len(data)}")
+        data += chunk
+    return data
+
+def _decode(bytes: bytes) -> str:
+    return bytes.decode('utf-8').rstrip('\x00')
