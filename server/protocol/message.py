@@ -3,6 +3,7 @@ from common.utils import Bet
 
 # agency, first_name, last_name, documento, date, number
 BET_LENGTH_BYTES = 4 + 30 + 20 + 8 + 10 + 4
+BATCH_LENGTH_BYTES = 4
 
 class Message(ABC):
     def __init__(self, message: bytes):
@@ -10,10 +11,6 @@ class Message(ABC):
 
     def write_to(self, stream):
         stream.sendall(self.message)
-
-    @abstractmethod
-    def read_from(cls, stream):
-        raise NotImplementedError()
 
 
 class BetMessage(Message):
@@ -31,6 +28,17 @@ class BetMessage(Message):
         date = _decode(msg[62:72])
         number = _decode(msg[72:76])
         return Bet(agency, first_name, last_name, documento, date, number)
+    
+class BatchMessage(Message):
+    @classmethod
+    def read_bets(cls, stream) -> list[Bet]:
+        bets_amount = _recv_exact(stream, BATCH_LENGTH_BYTES)
+        length = int.from_bytes(bets_amount, byteorder='big')
+        return [BetMessage.read_from(stream).to_bet() for _ in range(length)]
+
+class CodeMessage(Message):
+    def __init__(self, code: int):
+        super().__init__(code.to_bytes(4, byteorder='big'))
 
 
 def _recv_exact(stream, n: int) -> bytes:

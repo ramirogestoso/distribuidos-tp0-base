@@ -1,7 +1,7 @@
 import socket
 import logging
 
-from protocol.message import BetMessage
+from protocol.message import BatchMessage, CodeMessage
 from common.utils import store_bets
 
 class Server:
@@ -37,14 +37,19 @@ class Server:
         If a problem arises in the communication with the client, the
         client socket will also be closed
         """
+        bets = []
         try:
-            msg = BetMessage.read_from(client_sock)
-            bet = msg.to_bet()
-            store_bets([bet])
-            logging.info(f'action: apuesta_almacenada | result: success | dni: {bet.document} | numero: {bet.number}')
-            msg.write_to(client_sock)
+            while True:
+                bets = BatchMessage.read_bets(client_sock)
+                if not bets:
+                    CodeMessage(0).write_to(client_sock)
+                    break
+                store_bets(bets)
+                logging.info(f'action: apuesta_recibida | result: success | cantidad: {len(bets)}')
+                CodeMessage(len(bets)).write_to(client_sock)
         except OSError as e:
-            logging.error(f"action: receive_message | result: fail | error: {e}")
+            logging.error(f"action: apuesta_recibida | result: fail | cantidad: {len(bets)} | error: {e}")
+            CodeMessage(0).write_to(client_sock)
         finally:
             client_sock.close()
 
