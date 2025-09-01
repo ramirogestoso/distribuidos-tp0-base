@@ -15,21 +15,23 @@ type ClientConfig struct {
 	ID                   string
 	ServerAddress        string
 	ServerConnectRetries int
-	LoopAmount           int
-	LoopPeriod           time.Duration
+	BatchMaxAmount       int
+	BatchMaxSize         int // in bytes
 }
 
 // Client Entity that encapsulates how
 type Client struct {
 	config ClientConfig
 	conn   net.Conn
+	agency *Agency
 }
 
 // NewClient Initializes a new client receiving the configuration
 // as a parameter
-func NewClient(config ClientConfig) *Client {
+func NewClient(config ClientConfig, agency *Agency) *Client {
 	client := &Client{
 		config: config,
+		agency: agency,
 	}
 	return client
 }
