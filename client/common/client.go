@@ -12,10 +12,11 @@ var log = logging.MustGetLogger("log")
 
 // ClientConfig Configuration used by the client
 type ClientConfig struct {
-	ID            string
-	ServerAddress string
-	LoopAmount    int
-	LoopPeriod    time.Duration
+	ID                   string
+	ServerAddress        string
+	ServerConnectRetries int
+	LoopAmount           int
+	LoopPeriod           time.Duration
 }
 
 // Client Entity that encapsulates how
@@ -37,16 +38,23 @@ func NewClient(config ClientConfig) *Client {
 // failure, error is printed in stdout/stderr and exit 1
 // is returned
 func (c *Client) createClientSocket() error {
-	conn, err := net.Dial("tcp", c.config.ServerAddress)
-	if err != nil {
-		log.Criticalf(
-			"action: connect | result: fail | client_id: %v | error: %v",
-			c.config.ID,
-			err,
-		)
+	const retryInterval = 2 * time.Second
+	var retries = c.config.ServerConnectRetries
+	var err error
+	for i := 0; i < retries; i++ {
+		conn, err := net.Dial("tcp", c.config.ServerAddress)
+		if err == nil {
+			c.conn = conn
+			return nil
+		}
+		time.Sleep(retryInterval)
 	}
-	c.conn = conn
-	return nil
+	log.Criticalf(
+		"action: connect | result: fail | client_id: %v | error: %v",
+		c.config.ID,
+		err,
+	)
+	return err
 }
 
 // StartClientLoop Send messages to the client until some time threshold is met

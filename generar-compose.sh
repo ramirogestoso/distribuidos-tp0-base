@@ -38,6 +38,7 @@ function generate_clients {
     entrypoint: /client
     environment:
       - CLI_ID=$i
+      - CLI_SERVER_CONNECT_RETRIES=3
     networks:
       - testing_net
     depends_on:
