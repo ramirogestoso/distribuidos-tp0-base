@@ -41,6 +41,10 @@ func BetReadFrom(r io.Reader) (*Bet, error) {
 	}, nil
 }
 
+func (b *Bet) Size() int {
+	return BET_LENGTH_BYTES
+}
+
 func CsvToBet(record []string, agency string) *Bet {
 	return &Bet{
 		Agency:    agency,

@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"encoding/binary"
 	"io"
 )
 
@@ -36,4 +37,8 @@ func ReadMessage(r io.Reader, size int) (*Message, error) {
 		return nil, err
 	}
 	return &Message{Data: data}, nil
+}
+
+func (message *Message) ToInt() int {
+	return int(binary.BigEndian.Uint32(message.Data))
 }
