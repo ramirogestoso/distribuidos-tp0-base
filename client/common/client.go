@@ -62,9 +62,6 @@ func (c *Client) createClientSocket() error {
 
 // StartClientLoop Send messages to the client until some time threshold is met
 func (c *Client) StartClientLoop() {
-	c.createClientSocket()
-	defer c.StopClient()
-
 	batch := protocol.NewBatch(c.config.BatchMaxAmount, c.config.BatchMaxSize)
 	defer batch.Reset()
 
@@ -87,20 +84,17 @@ func (c *Client) StartClientLoop() {
 			return
 		}
 	}
-
-	// notify server to stop reading if last batch was not empty
-	if !batch.IsEmpty() {
-		batch.Reset()
-		c.SendBatch(batch)
-	}
-	// if err != nil {
-	// 	logError("send_message", c.config.ID, err)
-	// 	return
-	// }
-
 }
 
 func (c *Client) SendBatch(batch *protocol.Batch) error {
+
+	if batch.IsEmpty() {
+		return nil
+	}
+
+	c.createClientSocket()
+	defer c.StopClient()
+
 	batchMessage := batch.ToMessage()
 	if _, err := batchMessage.WriteTo(c.conn); err != nil {
 		logError("send_message", c.config.ID, err)
