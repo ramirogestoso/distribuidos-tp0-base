@@ -251,24 +251,23 @@ Así ante cada escenario el cliente no termina con errores.
 
 ### Protocolo
 
-`|payload_length|payload_json|`
+Cada apuesta se envia en un chunk de tamaño fijo de 76 bytes.
 
-- payload_length: header de 4 bytes para indicar el tamaño del payload
-- payload_json: payload de tamaño variable en formato `json`
+`|agency|first_name|last_name|document|birth_date|number`
 
-1. Leer 4 bytes que significan el tamaño en bytes del payload enviado
-2. Convertir a `int` (big endian)
-3. Leer esa cantidad de bytes e intepretar como `json`
+- agency: 4 bytes
+- first_name: 30 bytes
+- last_name: 20 bytes
+- document: 8 bytes
+- birth_date: 10 bytes
+- number: 4 bytes
 
-De esta forma, se puede enviar un `json` con cualquier contenido. En nuestro caso, ese contenido es una apuesta entonces sabemos como interpretarlo.
+Se espera que cada uno de ellos sea una cadena de texto de ese tamaño como máximo. El final de la cadena estará marcado con `\x00` para permitir enviar datos mas cortos.
 
-De todos modos, puede funcionar de forma generica y tener muchos propositos si agregamos mas información al `json` y acordamos entre las partes como van a ser esos `json` enviados.
+En esta instancia se espera que el cliente envíe solamente una apuesta en la conexión.
 
-#### Apuestas
+#### Flujo
 
-En nuestro caso, enviamos cada apuesta como `json` y el servidor espera recibir una apuesta por conexión (se planea una mejora a futuro sobre esto).
-
-Asi, el flujo queda:
 ```ascii
 +-------------------+                  +-------------------+
 |                   |                  |                   |
@@ -279,11 +278,11 @@ Asi, el flujo queda:
           |                                      |
           |------------- CONNECT --------------->|
           |                                      |
-          |----- ENVIAR(APUESTA/JSON) ---------->|
+          |---------- ENVIAR(APUESTA) ---------->|
           |                                      |
           |                                      |--- RECIBIR_DATOS --->
-          |                                      |--- PARSEAR_JSON ---->
-          |                                      |--- STORE_BETS ------->
+          |                                      |--- PARSEAR --------->
+          |                                      |--- STORE_BETS ------>
           |<---- DEVOLVER(APUESTA RECIBIDA) -----|
           |                                      |
           |----------- CERRAR_SOCKET ----------->|
@@ -295,7 +294,3 @@ Asi, el flujo queda:
 |                   |                  |      LISTEN       |
 +-------------------+                  +-------------------+
 ```
-
-Como observación, el servidor deja de ser un `echo server` en este ejercicio ya que espera recibir mensajes por medio del protocolo creado.
-
-Por el momento, el protocolo solamente es capaz de enviar y recibir apuestas.
