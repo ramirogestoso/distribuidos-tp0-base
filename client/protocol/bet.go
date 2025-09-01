@@ -40,3 +40,14 @@ func BetReadFrom(r io.Reader) (*Bet, error) {
 		Number:    string(msg.Data[72:76]),
 	}, nil
 }
+
+func CsvToBet(record []string, agency string) *Bet {
+	return &Bet{
+		Agency:    agency,
+		FirstName: record[0],
+		LastName:  record[1],
+		Document:  record[2],
+		Birthdate: record[3],
+		Number:    record[4],
+	}
+}
