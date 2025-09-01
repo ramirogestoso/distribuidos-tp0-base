@@ -1,6 +1,7 @@
 package common
 
 import (
+	"io"
 	"net"
 	"time"
 
@@ -61,42 +62,62 @@ func (c *Client) createClientSocket() error {
 
 // StartClientLoop Send messages to the client until some time threshold is met
 func (c *Client) StartClientLoop() {
-	// There is an autoincremental msgID to identify every message sent
-	// Messages if the message amount threshold has not been surpassed
-	var bet = protocol.Bet{
-		Agency:    c.config.ID,
-		FirstName: "John",
-		LastName:  "Doe",
-		Document:  "123456789",
-		Birthdate: "1990-01-01",
-		Number:    "1",
-	}
 	c.createClientSocket()
-	c.SendBet(&bet)
-	c.StopClient()
+	defer c.StopClient()
 
-	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
+	batch := protocol.NewBatch(c.config.BatchMaxAmount, c.config.BatchMaxSize)
+	defer batch.Reset()
+
+	for {
+		bet, err := c.agency.NextBet()
+		if err == io.EOF {
+			c.SendBatch(batch)
+			break
+		}
+		if err != nil {
+			logError("next_bet", c.config.ID, err)
+			return
+		}
+		if !batch.Fits(bet) {
+			c.SendBatch(batch)
+			batch.Reset()
+		}
+		if err := batch.AddBet(bet); err != nil {
+			logError("add_bet", c.config.ID, err)
+			return
+		}
+	}
+
+	// notify server to stop reading if last batch was not empty
+	if !batch.IsEmpty() {
+		batch.Reset()
+		c.SendBatch(batch)
+	}
+	// if err != nil {
+	// 	logError("send_message", c.config.ID, err)
+	// 	return
+	// }
+
 }
 
-func (c *Client) SendBet(bet *protocol.Bet) {
-
-	_, err := bet.ToMessage().WriteTo(c.conn)
-	if err != nil {
+func (c *Client) SendBatch(batch *protocol.Batch) error {
+	batchMessage := batch.ToMessage()
+	if _, err := batchMessage.WriteTo(c.conn); err != nil {
 		logError("send_message", c.config.ID, err)
-		return
+		return err
 	}
 
-	bet, err = protocol.BetReadFrom(c.conn)
+	betsReceived, err := protocol.ReadResponse(c.conn)
 	if err != nil {
 		logError("receive_message", c.config.ID, err)
-		return
+		return err
 	}
 
-	log.Infof("action: apuesta_enviada | result: success | dni: %v | numero: %v",
-		bet.Document,
-		bet.Number,
-	)
+	if betsReceived != batch.Amount() {
+		log.Infof("action: apuesta_recibida | result: fail | cantidad: %d", betsReceived)
+	}
 
+	return nil
 }
 
 func logError(action string, client_id string, err error) {
