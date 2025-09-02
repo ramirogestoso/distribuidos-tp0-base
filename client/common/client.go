@@ -126,7 +126,7 @@ func (c *Client) GetResults() error {
 		return err
 	}
 
-	log.Infof("action: espera_resultados | result: start")
+	log.Debugf("action: espera_resultados | result: start")
 
 	// Wait for results
 	winnersCount, err := protocol.ReadResponse(c.conn)

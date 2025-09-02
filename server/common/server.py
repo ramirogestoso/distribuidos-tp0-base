@@ -65,7 +65,6 @@ class Server:
         try:
             bets, agency = BatchMessage.read_bets(client_sock)
             if len(bets) == 0:
-                logging.info(f'action: apuesta_finalizada | result: success | agency: {agency} | empty_batch')
                 self._waiting_clients_sockets[int(agency)] = client_sock
                 should_close_socket = False
                 return
