@@ -7,6 +7,8 @@ import (
 	"io"
 )
 
+const BETS_AMOUNT_SIZE = 4
+
 type Batch struct {
 	Bets      []Bet
 	MaxSize   int
@@ -30,7 +32,7 @@ func (b *Batch) AddBet(bet *Bet) error {
 }
 
 func (b *Batch) Fits(bet *Bet) bool {
-	return len(b.Bets) < b.MaxAmount && b.Size()+bet.Size() <= b.MaxSize
+	return len(b.Bets) < b.MaxAmount && b.Size()+bet.Size()+BETS_AMOUNT_SIZE <= b.MaxSize
 }
 
 func (b *Batch) Size() int {
