@@ -380,3 +380,82 @@ Las apuestas se agregan al batch hasta que no entran mas. Cuando se alcanza el l
 |   ERROR (M != N)  |                          |      LISTEN       |
 +-------------------+                          +-------------------+
 ```
+
+## Ejercicio 7
+
+### Protocolo
+
+El protocolo extiende el del **Ejercicio 6**.  
+
+- Cada cliente envía sus batches de apuestas como en el Ejercicio 6.  
+- Cuando un cliente termina de enviar todos sus batches, envía un **batch vacío**.  
+  - Esto indica al servidor que ya no enviará más apuestas.  
+  - Luego, el cliente se queda esperando la lista de documentos ganadores de su agencia.  
+
+- El servidor interpreta un batch vacío como **fin de apuestas de ese cliente**.  
+  - Mantiene el socket abierto mientras espera a que todos los clientes terminen.  
+  - Conoce la cantidad total de clientes esperados.  
+
+- Cuando todos los clientes han indicado fin de apuestas:  
+  1. El servidor procesa todas las apuestas ganadoras.  
+  2. Envía a cada cliente la lista de documentos ganadores de su agencia.  
+     - Si un cliente no tiene ganadores, igualmente se le envía una lista vacía.  
+  3. Cada cliente cierra su socket después de recibir el resultado final.  
+  4. El servidor cierra los sockets de los clientes y reinicia el sorteo.
+
+#### Resultado de ganadores
+`winners_count|document_1|document_2|...|document_n|`
+
+- winners_count: 4 bytes indicando la cantidad de documentos ganadores
+- document_1, document_2, ..., document_n: identificadores de los documentos ganadores
+  - cada uno de 8 bytes
+
+---
+
+### Flujo cliente → servidor (envío de batchs y fin de apuestas)
+
+```ascii
++-------------------+                          +-------------------+
+|                   |                          |                   |
+|     CLIENTE       |                          |     SERVIDOR      |
+|                   |                          |                   |
++-------------------+                          |   (LISTEN TCP)    |
++-------------------+                          +-------------------+
+          |                                              |
+          |------------- CONNECT ----------------------->|
+          |                                              |
+          |----------- ENVIAR(BATCH 1) ----------------->|
+          |                  ...                         |
+          |----------- ENVIAR(BATCH N) ----------------->|
+          |                  ...                         |
+          |----------- ENVIAR(BATCH VACIO) ------------->|
+          |                                              |
+          |<---------- DOCUMENTOS GANADORES -------------|
+          |<---------- CERRAR_SOCKET --------------------|
+          |----------- CERRAR_SOCKET ------------------->|
+          |                                              |
++-------------------+                          +-------------------+
+| CLIENTE FIN       |                          | SERVIDOR SIGUE EN |
+|                   |                          |      LISTEN       |
+|                   |                          |                   |
++-------------------+                          +-------------------+
+```
+
+### Flujo servidor interno (espera a todos los clientes)
+```ascii
++-------------------+
+|   SERVIDOR        |
+|                   |
+|   (LISTEN TCP)    |
++-------------------+
+          |
+          |--- RECIBE BATCH DE CADA CLIENTE ---------|
+          |--- PARSEAR Y ALMACENAR BATCHS -----------|
+          |--- CLIENTE ENVIA BATCH VACIO ------------| (marca cliente como "terminado")
+          |               ...                        |
+          |--- CUANDO TODOS LOS CLIENTES TERMINAN ---|
+          |--- PROCESAR APUESTAS GANADORAS ----------|
+          |--- ENVIAR DOCUMENTOS GANADORES A C/U ----|
+          |--- CERRAR SOCKETS DE CLIENTES -----------|
+          |--- REINICIAR SORTEO ---------------------|
+```
