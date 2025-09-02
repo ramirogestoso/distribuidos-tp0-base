@@ -84,6 +84,8 @@ func (c *Client) StartClientLoop() {
 			return
 		}
 	}
+
+	c.GetResults()
 }
 
 func (c *Client) SendBatch(batch *protocol.Batch) error {
@@ -111,6 +113,28 @@ func (c *Client) SendBatch(batch *protocol.Batch) error {
 		log.Infof("action: apuesta_recibida | result: fail | cantidad: %d", betsReceived)
 	}
 
+	return nil
+}
+
+func (c *Client) GetResults() error {
+	c.createClientSocket()
+	defer c.StopClient()
+
+	batchMessage := protocol.NewEmptyBatch(c.config.ID).ToMessage()
+	if _, err := batchMessage.WriteTo(c.conn); err != nil {
+		logError("send_message", c.config.ID, err)
+		return err
+	}
+
+	log.Infof("action: espera_resultados | result: start")
+
+	// Wait for results
+	winnersCount, err := protocol.ReadResponse(c.conn)
+	if err != nil {
+		logError("receive_message", c.config.ID, err)
+		return err
+	}
+	log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", winnersCount)
 	return nil
 }
 
