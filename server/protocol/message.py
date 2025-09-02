@@ -36,7 +36,6 @@ class BatchMessage(Message):
         agency = _decode(_recv_exact(stream, BET_AGENCY_BYTES))
         bets_amount = _recv_exact(stream, BATCH_LENGTH_BYTES)
         length = int.from_bytes(bets_amount, byteorder='big')
-        print(f"action: read_bets | result: success | size: {8 + length * BET_LENGTH_BYTES}")
         return [BetMessage.read_from(stream).to_bet(agency) for _ in range(length)], agency
 
 class CodeMessage(Message):
