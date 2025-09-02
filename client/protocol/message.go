@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"bytes"
 	"encoding/binary"
 	"io"
 )
@@ -41,6 +42,26 @@ func ReadMessage(r io.Reader, size int) (*Message, error) {
 
 func (message *Message) ToInt() int {
 	return int(binary.BigEndian.Uint32(message.Data))
+}
+
+func (message *Message) ToString() string {
+	return string(bytes.TrimRight(message.Data, "\x00"))
+}
+
+func ReadInt(r io.Reader) (int, error) {
+	message, err := ReadMessage(r, 4)
+	if err != nil {
+		return 0, err
+	}
+	return message.ToInt(), nil
+}
+
+func ReadString(r io.Reader, length int) (string, error) {
+	message, err := ReadMessage(r, length)
+	if err != nil {
+		return "", err
+	}
+	return message.ToString(), nil
 }
 
 func fixedBytes(s string, length int) []byte {
