@@ -42,6 +42,16 @@ class CodeMessage(Message):
     def __init__(self, code: int):
         super().__init__(code.to_bytes(4, byteorder='big'))
 
+class LotteryResultMessage(Message):
+    def __init__(self, winners_documents: list[str]):
+        count = len(winners_documents)
+        message = count.to_bytes(4, byteorder='big')
+        for document in winners_documents:
+            doc_bytes = document.encode('utf-8')[:8]
+            doc_bytes = doc_bytes.ljust(8, b'\x00')
+            message += doc_bytes
+        super().__init__(message)
+
 
 def _recv_exact(stream, n: int) -> bytes:
     data = b""

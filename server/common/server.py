@@ -1,7 +1,7 @@
 import socket
 import logging
 
-from protocol.message import BatchMessage, CodeMessage
+from protocol.message import BatchMessage, CodeMessage, LotteryResultMessage
 from common.utils import has_won, load_bets, store_bets
 
 class Server:
@@ -39,13 +39,13 @@ class Server:
         winnerBets = [bet for bet in load_bets() if has_won(bet)]
         winners_by_agency = dict()
         for agency in self._waiting_clients_sockets.keys():
-            winners_by_agency[agency] = 0
+            winners_by_agency[agency] = []
         for bet in winnerBets:
-            winners_by_agency[bet.agency] += 1
+            winners_by_agency[bet.agency].append(bet.document)
 
-        for agency, count in winners_by_agency.items():
+        for agency, documents in winners_by_agency.items():
             client_socket = self._waiting_clients_sockets[agency]
-            try: CodeMessage(count).write_to(client_socket)
+            try: LotteryResultMessage(documents).write_to(client_socket)
             finally: client_socket.close()
 
         logging.info("action: sorteo | result: success")
