@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"bytes"
+	"io"
 )
 
 const BET_LENGTH_BYTES = 30 + 20 + 8 + 10 + 4
@@ -38,4 +39,20 @@ func CsvToBet(record []string, agency string) *Bet {
 		Birthdate: record[3],
 		Number:    record[4],
 	}
+}
+
+func ReadWinnersDocuments(r io.Reader) ([]string, error) {
+	var winnersDocuments []string
+	winnersCountMessage, err := ReadInt(r)
+	if err != nil {
+		return nil, err
+	}
+	for i := 0; i < winnersCountMessage; i++ {
+		document, err := ReadString(r, 8)
+		if err != nil {
+			return nil, err
+		}
+		winnersDocuments = append(winnersDocuments, document)
+	}
+	return winnersDocuments, nil
 }
