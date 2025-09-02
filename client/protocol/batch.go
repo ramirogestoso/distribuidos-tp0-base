@@ -74,3 +74,7 @@ func (b *Batch) ToMessage() *Message {
 
 	return &Message{Data: data.Bytes()}
 }
+
+func NewEmptyBatch(agency string) *Batch {
+	return NewBatch(0, 0, agency)
+}
