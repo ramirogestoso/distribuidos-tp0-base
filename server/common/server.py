@@ -39,9 +39,9 @@ class Server:
         winnerBets = [bet for bet in load_bets() if has_won(bet)]
         winners_by_agency = dict()
         for agency in self._waiting_clients_sockets.keys():
-            winners_by_agency[agency] = []
+            winners_by_agency[agency] = set()
         for bet in winnerBets:
-            winners_by_agency[bet.agency].append(bet.document)
+            winners_by_agency[bet.agency].add(bet.document)
 
         for agency, documents in winners_by_agency.items():
             client_socket = self._waiting_clients_sockets[agency]
