@@ -299,10 +299,13 @@ En esta instancia se espera que el cliente envíe solamente una apuesta en la co
 
 ### Protocolo
 
-Cada batch envía un header de 4 bytes indicando la cantidad de apuestas.
+Cada batch envía un header de 8 bytes indicando la agencia y la cantidad de apuestas:
+- id de agencia (string): 4 bytes
+- cantidad de apuestas (int): 4 bytes
+
 Luego, se lee esa cantidad de apuestas de la misma forma que el protocolo descripto en el ejercicio anterior.
 
-`bets_amount|bet_1|bet_2|...|bet_n`
+`agency_id|bets_amount|bet_1|bet_2|...|bet_n`
 
 Una vez recibido todo el batch de apuestas, el servidor responde con la cantidad de apuestas procesadas. El cliente por su lado espera ese valor para determinar si fue exitoso.
 
@@ -335,7 +338,7 @@ Las apuestas se agregan al batch hasta que no entran mas. Cuando se alcanza el l
           |                                              |
           |------------- CONNECT ----------------------->|
           |                                              |
-          |----------- ENVIAR(N + N BETS) -------------->|
+          |----- ENVIAR(AGENCY_ID + N + N BETS) -------->|
           |                                              |--- RECIBIR_DATOS --->
           |                                              |--- PARSEAR_BATCH ---->
           |                                              |--- STORE_BETS ------->
@@ -362,11 +365,11 @@ Las apuestas se agregan al batch hasta que no entran mas. Cuando se alcanza el l
           |                                              |
           |------------- CONNECT ----------------------->|
           |                                              |
-          |----------- ENVIAR(N + N BETS) -------------->|
+          |------ ENVIAR(AGENCY_ID + N + N BETS) ------->|
           |                                              |--- RECIBIR_DATOS --->
           |                                              |--- PARSEAR_BATCH ---->
           |                                              |--- STORE_BETS (FALLA) ->
-          |<---------- RESPUESTA NO OK (M) --------------|
+          |<---------- RESPUESTA NO OK (M=0) ------------|
           |                                              |
           |----------- CERRAR_SOCKET ------------------->|
           |                                              |
