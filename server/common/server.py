@@ -10,9 +10,10 @@ class Server:
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
-        self._client_socket = None
+        self._current_client_socket = None
         self._running = True
         self._clients_count = clients_count
+        self._waiting_clients_sockets = dict()  # Map of agency to client socket
 
     def run(self):
         """
@@ -25,8 +26,10 @@ class Server:
 
         while self._running:
             try:
-                self._client_socket = self.__accept_new_connection()
-                self.__handle_client_connection(self._client_socket)
+                if len(self._waiting_clients_sockets) >= self._clients_count:
+                    logging.info("action: sorteo | result: success")
+                self._current_client_socket = self.__accept_new_connection()
+                self.__handle_client_connection(self._current_client_socket)
             except OSError:
                if not self._running: break
                raise
@@ -39,8 +42,14 @@ class Server:
         client socket will also be closed
         """
         bets = []
+        should_close_socket = True
         try:
             bets, agency = BatchMessage.read_bets(client_sock)
+            if len(bets) == 0:
+                logging.info(f'action: apuesta_finalizada | result: success | agency: {agency} | empty_batch')
+                self._waiting_clients_sockets[agency] = client_sock
+                should_close_socket = False
+                return
             store_bets(bets)
             logging.info(f'action: apuesta_recibida | result: success | cantidad: {len(bets)} | agency: {agency}')
             CodeMessage(len(bets)).write_to(client_sock)
@@ -48,7 +57,8 @@ class Server:
             logging.error(f"action: apuesta_recibida | result: fail | cantidad: {len(bets)} | error: {e}")
             CodeMessage(0).write_to(client_sock)
         finally:
-            client_sock.close()
+            if should_close_socket:
+                client_sock.close()
 
     def __accept_new_connection(self):
         """
@@ -70,5 +80,7 @@ class Server:
         """
         self._running = False
         self._server_socket.close()
-        if self._client_socket:
-            self._client_socket.close()
+        if self._current_client_socket:
+            self._current_client_socket.close()
+        for sock in self._waiting_clients_sockets.values():
+            sock.close()
