@@ -294,3 +294,86 @@ En esta instancia se espera que el cliente envíe solamente una apuesta en la co
 |                   |                  |      LISTEN       |
 +-------------------+                  +-------------------+
 ```
+
+## Ejercicio 6
+
+### Protocolo
+
+Cada batch envía un header de 4 bytes indicando la cantidad de apuestas.
+Luego, se lee esa cantidad de apuestas de la misma forma que el protocolo descripto en el ejercicio anterior.
+
+`bets_amount|bet_1|bet_2|...|bet_n`
+
+Una vez recibido todo el batch de apuestas, el servidor responde con la cantidad de apuestas procesadas. El cliente por su lado espera ese valor para determinar si fue exitoso.
+
+Esa respuesta es de 4 bytes representando un número entero.
+
+`bets_amount_processed`
+
+Si `bets_amount_processed == bets_amount` entonces fue exitoso. Caso contrario hubo un error.
+
+Luego de procesar el batch, exitosamente o no, ambos cierran la conexión.
+
+El cliente prepará un nuevo batch, el servidor quedará escuchando nuevamente.
+Cuando el batch este listo, puede crear una nueva conexión y enviarlo. Mientras tanto, otros clientes pueden hacer uso del servidor.
+
+### Batch
+
+Respeta un limite de cantidad de apuestas a incluir y un tamaño máximo de batch en bytes.
+
+Las apuestas se agregan al batch hasta que no entran mas. Cuando se alcanza el limite, el cliente las envía al servidor.
+
+### Flujo exitoso
+
+```ascii
++-------------------+                          +-------------------+
+|                   |                          |                   |
+|     CLIENTE       |                          |     SERVIDOR      |
+|                   |                          |                   |
++-------------------+                          |   (LISTEN TCP)    |
++-------------------+                          +-------------------+
+          |                                              |
+          |------------- CONNECT ----------------------->|
+          |                                              |
+          |----------- ENVIAR(N + N BETS) -------------->|
+          |                                              |--- RECIBIR_DATOS --->
+          |                                              |--- PARSEAR_BATCH ---->
+          |                                              |--- STORE_BETS ------->
+          |<---------- RESPUESTA OK (N) -----------------|
+          |                                              |
+          |----------- CERRAR_SOCKET ------------------->|
+          |                                              |
+          |<---------- CERRAR_SOCKET --------------------|
+          |                                              |
++-------------------+                          +-------------------+
+|   CLIENTE FIN     |                          | SERVIDOR SIGUE EN |
+|                   |                          |      LISTEN       |
++-------------------+                          +-------------------+
+```
+
+### Flujo no exitoso
+```ascii
++-------------------+                          +-------------------+
+|                   |                          |                   |
+|     CLIENTE       |                          |     SERVIDOR      |
+|                   |                          |                   |
++-------------------+                          |   (LISTEN TCP)    |
++-------------------+                          +-------------------+
+          |                                              |
+          |------------- CONNECT ----------------------->|
+          |                                              |
+          |----------- ENVIAR(N + N BETS) -------------->|
+          |                                              |--- RECIBIR_DATOS --->
+          |                                              |--- PARSEAR_BATCH ---->
+          |                                              |--- STORE_BETS (FALLA) ->
+          |<---------- RESPUESTA NO OK (M) --------------|
+          |                                              |
+          |----------- CERRAR_SOCKET ------------------->|
+          |                                              |
+          |<---------- CERRAR_SOCKET --------------------|
+          |                                              |
++-------------------+                          +-------------------+
+| CLIENTE DETECTA   |                          | SERVIDOR SIGUE EN |
+|   ERROR (M != N)  |                          |      LISTEN       |
++-------------------+                          +-------------------+
+```
