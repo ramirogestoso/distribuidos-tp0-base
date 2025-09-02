@@ -62,7 +62,7 @@ func (c *Client) createClientSocket() error {
 
 // StartClientLoop Send messages to the client until some time threshold is met
 func (c *Client) StartClientLoop() {
-	batch := protocol.NewBatch(c.config.BatchMaxAmount, c.config.BatchMaxSize)
+	batch := protocol.NewBatch(c.config.BatchMaxAmount, c.config.BatchMaxSize, c.config.ID)
 	defer batch.Reset()
 
 	for {

@@ -8,18 +8,21 @@ import (
 )
 
 const BETS_AMOUNT_SIZE = 4
+const BETS_AGENCY_SIZE = 4
 
 type Batch struct {
 	Bets      []Bet
 	MaxSize   int
 	MaxAmount int
+	Agency    string
 }
 
-func NewBatch(maxAmount int, maxSize int) *Batch {
+func NewBatch(maxAmount int, maxSize int, agency string) *Batch {
 	return &Batch{
 		Bets:      make([]Bet, 0, maxAmount),
 		MaxAmount: maxAmount,
 		MaxSize:   maxSize,
+		Agency:    agency,
 	}
 }
 
@@ -32,7 +35,7 @@ func (b *Batch) AddBet(bet *Bet) error {
 }
 
 func (b *Batch) Fits(bet *Bet) bool {
-	return len(b.Bets) < b.MaxAmount && b.Size()+bet.Size()+BETS_AMOUNT_SIZE <= b.MaxSize
+	return len(b.Bets) < b.MaxAmount && b.Size()+bet.Size()+BETS_AMOUNT_SIZE+BETS_AGENCY_SIZE <= b.MaxSize
 }
 
 func (b *Batch) Size() int {
@@ -61,6 +64,8 @@ func ReadResponse(r io.Reader) (int, error) {
 
 func (b *Batch) ToMessage() *Message {
 	data := new(bytes.Buffer)
+
+	data.Write(fixedBytes(b.Agency, 4))
 
 	binary.Write(data, binary.BigEndian, uint32(b.Amount()))
 	for _, bet := range b.Bets {

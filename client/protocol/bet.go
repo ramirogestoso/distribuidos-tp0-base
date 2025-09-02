@@ -1,10 +1,10 @@
 package protocol
 
 import (
-	"io"
+	"bytes"
 )
 
-const BET_LENGTH_BYTES = 4 + 30 + 20 + 8 + 10 + 4
+const BET_LENGTH_BYTES = 30 + 20 + 8 + 10 + 4
 
 type Bet struct {
 	Agency    string
@@ -16,29 +16,13 @@ type Bet struct {
 }
 
 func (b *Bet) ToMessage() *Message {
-	data := make([]byte, 76)
-	copy(data[0:4], b.Agency)
-	copy(data[4:34], b.FirstName)
-	copy(data[34:54], b.LastName)
-	copy(data[54:62], b.Document)
-	copy(data[62:72], b.Birthdate)
-	copy(data[72:76], b.Number)
-	return &Message{Data: data}
-}
-
-func BetReadFrom(r io.Reader) (*Bet, error) {
-	msg, err := ReadMessage(r, BET_LENGTH_BYTES)
-	if err != nil {
-		return nil, err
-	}
-	return &Bet{
-		Agency:    string(msg.Data[0:4]),
-		FirstName: string(msg.Data[4:34]),
-		LastName:  string(msg.Data[34:54]),
-		Document:  string(msg.Data[54:62]),
-		Birthdate: string(msg.Data[62:72]),
-		Number:    string(msg.Data[72:76]),
-	}, nil
+	data := new(bytes.Buffer)
+	data.Write(fixedBytes(b.FirstName, 30))
+	data.Write(fixedBytes(b.LastName, 20))
+	data.Write(fixedBytes(b.Document, 8))
+	data.Write(fixedBytes(b.Birthdate, 10))
+	data.Write(fixedBytes(b.Number, 4))
+	return &Message{Data: data.Bytes()}
 }
 
 func (b *Bet) Size() int {
