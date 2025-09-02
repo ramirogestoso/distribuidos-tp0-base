@@ -129,12 +129,12 @@ func (c *Client) GetResults() error {
 	log.Debugf("action: espera_resultados | result: start")
 
 	// Wait for results
-	winnersCount, err := protocol.ReadResponse(c.conn)
+	winnersDocuments, err := protocol.ReadWinnersDocuments(c.conn)
 	if err != nil {
 		logError("receive_message", c.config.ID, err)
 		return err
 	}
-	log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d", winnersCount)
+	log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d | ganadores: %v", len(winnersDocuments), winnersDocuments)
 	return nil
 }
 
