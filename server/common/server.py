@@ -2,7 +2,7 @@ import socket
 import logging
 
 from protocol.message import BatchMessage, CodeMessage
-from common.utils import store_bets
+from common.utils import has_won, load_bets, store_bets
 
 class Server:
     def __init__(self, port, listen_backlog, clients_count):
@@ -27,12 +27,31 @@ class Server:
         while self._running:
             try:
                 if len(self._waiting_clients_sockets) >= self._clients_count:
-                    logging.info("action: sorteo | result: success")
+                    self.__lottery()
+                    self.__restart_lottery()
                 self._current_client_socket = self.__accept_new_connection()
                 self.__handle_client_connection(self._current_client_socket)
             except OSError:
                if not self._running: break
                raise
+    
+    def __lottery(self):
+        winnerBets = [bet for bet in load_bets() if has_won(bet)]
+        winners_by_agency = dict()
+        for agency in self._waiting_clients_sockets.keys():
+            winners_by_agency[agency] = 0
+        for bet in winnerBets:
+            winners_by_agency[bet.agency] += 1
+
+        for agency, count in winners_by_agency.items():
+            client_socket = self._waiting_clients_sockets[agency]
+            try: CodeMessage(count).write_to(client_socket)
+            finally: client_socket.close()
+
+        logging.info("action: sorteo | result: success")
+
+    def __restart_lottery(self):
+        self._waiting_clients_sockets.clear()
 
     def __handle_client_connection(self, client_sock):
         """
@@ -47,7 +66,7 @@ class Server:
             bets, agency = BatchMessage.read_bets(client_sock)
             if len(bets) == 0:
                 logging.info(f'action: apuesta_finalizada | result: success | agency: {agency} | empty_batch')
-                self._waiting_clients_sockets[agency] = client_sock
+                self._waiting_clients_sockets[int(agency)] = client_sock
                 should_close_socket = False
                 return
             store_bets(bets)
