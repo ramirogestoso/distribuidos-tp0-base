@@ -39,9 +39,9 @@ class Server:
         """
         bets = []
         try:
-            bets = BatchMessage.read_bets(client_sock)
+            bets, agency = BatchMessage.read_bets(client_sock)
             store_bets(bets)
-            logging.info(f'action: apuesta_recibida | result: success | cantidad: {len(bets)} | agency: {bets[0].agency}')
+            logging.info(f'action: apuesta_recibida | result: success | cantidad: {len(bets)} | agency: {agency}')
             CodeMessage(len(bets)).write_to(client_sock)
         except OSError as e:
             logging.error(f"action: apuesta_recibida | result: fail | cantidad: {len(bets)} | error: {e}")

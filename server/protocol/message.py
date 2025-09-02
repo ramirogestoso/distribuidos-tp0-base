@@ -1,9 +1,11 @@
-from abc import ABC, abstractmethod
+from abc import ABC
+import io
 from common.utils import Bet
 
-# agency, first_name, last_name, documento, date, number
-BET_LENGTH_BYTES = 4 + 30 + 20 + 8 + 10 + 4
+# first_name, last_name, documento, date, number
+BET_LENGTH_BYTES = 30 + 20 + 8 + 10 + 4
 BATCH_LENGTH_BYTES = 4
+BET_AGENCY_BYTES = 4
 
 class Message(ABC):
     def __init__(self, message: bytes):
@@ -18,23 +20,24 @@ class BetMessage(Message):
     def read_from(cls, stream):
         message = _recv_exact(stream, BET_LENGTH_BYTES)
         return cls(message)
-    
-    def to_bet(self):
-        msg = self.message
-        agency = _decode(msg[0:4])
-        first_name = _decode(msg[4:34])
-        last_name = _decode(msg[34:54])
-        documento = _decode(msg[54:62])
-        date = _decode(msg[62:72])
-        number = _decode(msg[72:76])
+
+    def to_bet(self, agency: str):
+        msg = io.BytesIO(self.message)
+        first_name = _decode(msg.read(30))
+        last_name = _decode(msg.read(20))
+        documento = _decode(msg.read(8))
+        date = _decode(msg.read(10))
+        number = _decode(msg.read(4))
         return Bet(agency, first_name, last_name, documento, date, number)
     
 class BatchMessage(Message):
     @classmethod
-    def read_bets(cls, stream) -> list[Bet]:
+    def read_bets(cls, stream) -> tuple[list[Bet], str]:
+        agency = _decode(_recv_exact(stream, BET_AGENCY_BYTES))
         bets_amount = _recv_exact(stream, BATCH_LENGTH_BYTES)
         length = int.from_bytes(bets_amount, byteorder='big')
-        return [BetMessage.read_from(stream).to_bet() for _ in range(length)]
+        print(f"action: read_bets | result: success | size: {8 + length * BET_LENGTH_BYTES}")
+        return [BetMessage.read_from(stream).to_bet(agency) for _ in range(length)], agency
 
 class CodeMessage(Message):
     def __init__(self, code: int):
