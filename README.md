@@ -459,3 +459,37 @@ El protocolo extiende el del **Ejercicio 6**.
           |--- CERRAR SOCKETS DE CLIENTES -----------|
           |--- REINICIAR SORTEO ---------------------|
 ```
+
+
+# Resumen protocolo
+
+## Mensajes
+### Cliente → Servidor
+- BATCH
+- BATCH VACIO
+
+#### Batch
+`agency_id|bets_amount|bet_1|bet_2|...|bet_n`
+- agency_id: 4 bytes
+- bets_amount: 4 bytes
+- bet_i: 72 bytes
+  - first_name: 30 bytes
+  - last_name: 20 bytes
+  - document: 8 bytes
+  - birth_date: 10 bytes
+  - number: 4 bytes
+
+### Servidor → Cliente
+- CODE MESSAGE
+- DOCUMENTOS GANADORES
+
+#### Code Message
+`code`
+- code: 4 bytes
+
+Usado para indicar la cantidad de apuestas recibidas de un cliente
+
+#### Documentos ganadores
+`winners_count|document_1|document_2|...|document_n|`
+- winners_count: 4 bytes
+- document_i: 8 bytes
