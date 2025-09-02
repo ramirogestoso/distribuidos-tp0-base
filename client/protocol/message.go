@@ -42,3 +42,9 @@ func ReadMessage(r io.Reader, size int) (*Message, error) {
 func (message *Message) ToInt() int {
 	return int(binary.BigEndian.Uint32(message.Data))
 }
+
+func fixedBytes(s string, length int) []byte {
+	buf := make([]byte, length)
+	copy(buf, s)
+	return buf
+}
