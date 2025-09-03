@@ -13,7 +13,7 @@ class Server:
         self._current_client_socket = None
         self._running = True
         self._clients_count = clients_count
-        self._waiting_clients_sockets = dict()  # Map of agency to client socket
+        self._clients_sockets = dict()  # Map of agency to client socket
 
     def run(self):
         """
@@ -26,9 +26,8 @@ class Server:
 
         while self._running:
             try:
-                if len(self._waiting_clients_sockets) >= self._clients_count:
+                if len(self._clients_sockets) >= self._clients_count:
                     self.__lottery()
-                    self.__restart_lottery()
                 self._current_client_socket = self.__accept_new_connection()
                 self.__handle_client_connection(self._current_client_socket)
             except OSError:
@@ -38,20 +37,19 @@ class Server:
     def __lottery(self):
         winnerBets = [bet for bet in load_bets() if has_won(bet)]
         winners_by_agency = dict()
-        for agency in self._waiting_clients_sockets.keys():
+        for agency in self._clients_sockets.keys():
             winners_by_agency[agency] = set()
         for bet in winnerBets:
             winners_by_agency[bet.agency].add(bet.document)
 
         for agency, documents in winners_by_agency.items():
-            client_socket = self._waiting_clients_sockets[agency]
+            client_socket = self._clients_sockets[agency]
             try: LotteryResultMessage(documents).write_to(client_socket)
             finally: client_socket.close()
 
-        logging.info("action: sorteo | result: success")
+        self._clients_sockets.clear()
 
-    def __restart_lottery(self):
-        self._waiting_clients_sockets.clear()
+        logging.info("action: sorteo | result: success")
 
     def __handle_client_connection(self, client_sock):
         """
@@ -64,8 +62,8 @@ class Server:
         while True:
             try:
                 bets, agency = BatchMessage.read_bets(client_sock)
+                self._clients_sockets[int(agency)] = client_sock
                 if not bets:
-                    self._waiting_clients_sockets[int(agency)] = client_sock
                     break
                 store_bets(bets)
                 logging.info(f'action: apuesta_recibida | result: success | cantidad: {len(bets)} | agency: {agency}')
@@ -96,5 +94,5 @@ class Server:
         self._server_socket.close()
         if self._current_client_socket:
             self._current_client_socket.close()
-        for sock in self._waiting_clients_sockets.values():
+        for sock in self._clients_sockets.values():
             sock.close()
