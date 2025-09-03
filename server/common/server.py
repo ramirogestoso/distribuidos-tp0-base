@@ -61,22 +61,18 @@ class Server:
         client socket will also be closed
         """
         bets = []
-        should_close_socket = True
-        try:
-            bets, agency = BatchMessage.read_bets(client_sock)
-            if len(bets) == 0:
-                self._waiting_clients_sockets[int(agency)] = client_sock
-                should_close_socket = False
-                return
-            store_bets(bets)
-            logging.info(f'action: apuesta_recibida | result: success | cantidad: {len(bets)} | agency: {agency}')
-            CodeMessage(len(bets)).write_to(client_sock)
-        except OSError as e:
-            logging.error(f"action: apuesta_recibida | result: fail | cantidad: {len(bets)} | error: {e}")
-            CodeMessage(0).write_to(client_sock)
-        finally:
-            if should_close_socket:
-                client_sock.close()
+        while True:
+            try:
+                bets, agency = BatchMessage.read_bets(client_sock)
+                if not bets:
+                    self._waiting_clients_sockets[int(agency)] = client_sock
+                    break
+                store_bets(bets)
+                logging.info(f'action: apuesta_recibida | result: success | cantidad: {len(bets)} | agency: {agency}')
+                CodeMessage(len(bets)).write_to(client_sock)
+            except OSError as e:
+                logging.error(f"action: apuesta_recibida | result: fail | cantidad: {len(bets)} | error: {e}")
+                CodeMessage(0).write_to(client_sock)
 
     def __accept_new_connection(self):
         """
