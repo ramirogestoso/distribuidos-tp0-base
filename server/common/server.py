@@ -1,47 +1,124 @@
+from collections import defaultdict
 import socket
 import logging
+import threading
 
+from protocol.message import BatchMessage, CodeMessage, LotteryResultMessage
+from common.utils import has_won, load_bets, store_bets
 
 class Server:
-    def __init__(self, port, listen_backlog):
+    def __init__(self, port, listen_backlog, clients_count):
         # Initialize server socket
+        self._sockets = []
+        self.__initialize_server_socket(port, listen_backlog)
+        self._running = True
+        # Clients tracking
+        self._clients_count = clients_count
+        self._waiting_clients_sockets = dict()  # Map of agency to client socket
+        # Threads
+        self._waiting_clients_lock = threading.Lock()
+        self._store_bets_lock = threading.Lock()
+        self._threads = []
+
+    def __initialize_server_socket(self, port, listen_backlog):
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._server_socket.bind(('', port))
         self._server_socket.listen(listen_backlog)
+        self._sockets.append(self._server_socket)
 
     def run(self):
+        while self._running:
+            try:
+                client_sock = self.__accept_new_connection()
+                self.__handle_connection(client_sock)
+            except OSError:
+               if not self._running: break
+               raise
+
+    def __handle_connection(self, client_sock):
+        t = threading.Thread(target=self.__handle_client, args=(client_sock,))
+        t.start()
+        self._threads.append(t)
+
+    def __handle_client(self, client_sock):
         """
-        Dummy Server loop
+        Handle communication with a specific client
 
-        Server that accept a new connections and establishes a
-        communication with a client. After client with communucation
-        finishes, servers starts to accept new connections again
-        """
+        This function is executed in a separate thread for each client
+        connection.
 
-        # TODO: Modify this program to handle signal to graceful shutdown
-        # the server
-        while True:
-            client_sock = self.__accept_new_connection()
-            self.__handle_client_connection(client_sock)
-
-    def __handle_client_connection(self, client_sock):
-        """
-        Read message from a specific client socket and closes the socket
-
-        If a problem arises in the communication with the client, the
-        client socket will also be closed
+        Reads all bets from the client and tries to play the lottery at the end
         """
         try:
-            # TODO: Modify the receive to avoid short-reads
-            msg = client_sock.recv(1024).rstrip().decode('utf-8')
-            addr = client_sock.getpeername()
-            logging.info(f'action: receive_message | result: success | ip: {addr[0]} | msg: {msg}')
-            # TODO: Modify the send to avoid short-writes
-            client_sock.send("{}\n".format(msg).encode('utf-8'))
+            agency = self.__read_and_save_agency_bets(client_sock)
+            self.__try_to_play_lottery(agency, client_sock)
         except OSError as e:
-            logging.error("action: receive_message | result: fail | error: {e}")
-        finally:
-            client_sock.close()
+            logging.error(f"action: apuesta_recibida | result: fail | cantidad: 0 | error: {e}")
+            self.__try_send_code(client_sock, 0)
+
+    def __read_and_save_agency_bets(self, client_sock):
+        """
+        Reads all bets from the client socket
+
+        Stores the bets in a shared file
+
+        Returns the agency associated with the bets
+        """
+        bets, agency = BatchMessage.read_bets(client_sock)
+        while bets:
+            self.__store_bets(bets)
+            logging.info(f'action: apuesta_recibida | result: success | cantidad: {len(bets)} | agency: {agency}')
+            self.__try_send_code(client_sock, len(bets))
+            bets, agency = BatchMessage.read_bets(client_sock)
+
+        return agency
+
+    def __store_bets(self, bets):
+        with self._store_bets_lock:
+            store_bets(bets)
+
+    def __try_send_code(self, client_sock, code):
+        try: CodeMessage(code).write_to(client_sock)
+        except OSError as e: 
+            logging.debug(f"action: enviar_codigo | result: fail | codigo: {code} | error: {e}")
+            self.__close_socket(client_sock)
+
+    def __try_to_play_lottery(self, agency, client_sock):
+        """
+        Tries to play the lottery if all agencies are waiting
+        """
+        with self._waiting_clients_lock:
+            self._waiting_clients_sockets[int(agency)] = client_sock
+            if len(self._waiting_clients_sockets) == self._clients_count: # only last agency triggers lottery
+                self.__play_lottery()
+
+    def __play_lottery(self):
+        """
+        Plays the lottery for all waiting agencies
+
+        Sends the results to the respective clients
+
+        Then connections are closed
+        """
+        winner_bets = [bet for bet in load_bets() if has_won(bet)]
+        
+        winners_by_agency = defaultdict(set)
+
+        for bet in winner_bets:
+            winners_by_agency[bet.agency].add(bet.document)
+
+        for agency, client_sock in self._waiting_clients_sockets.items():
+            documents = winners_by_agency.get(agency, set())
+            try: LotteryResultMessage(documents).write_to(client_sock)
+            finally: self.__close_socket(client_sock)
+
+        self._waiting_clients_sockets.clear()
+
+        logging.info("action: sorteo | result: success")
+
+    def __close_socket(self, sock):
+        sock.close()
+        if sock in self._sockets: self._sockets.remove(sock)
 
     def __accept_new_connection(self):
         """
@@ -54,5 +131,16 @@ class Server:
         # Connection arrived
         logging.info('action: accept_connections | result: in_progress')
         c, addr = self._server_socket.accept()
+        self._sockets.append(c)
         logging.info(f'action: accept_connections | result: success | ip: {addr[0]}')
         return c
+
+    def stop(self):
+        """
+        Stops the server gracefully
+        """
+        self._running = False
+        for sock in self._sockets:
+            sock.close()
+        for t in self._threads:
+            t.join()

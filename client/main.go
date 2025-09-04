@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/op/go-logging"
@@ -34,9 +36,8 @@ func InitConfig() (*viper.Viper, error) {
 	// Add env variables supported
 	v.BindEnv("id")
 	v.BindEnv("server", "address")
-	v.BindEnv("loop", "period")
-	v.BindEnv("loop", "amount")
 	v.BindEnv("log", "level")
+	v.BindEnv("batch", "maxAmount")
 
 	// Try to read configuration from config file. If config file
 	// does not exists then ReadInConfig will fail but configuration
@@ -81,16 +82,20 @@ func InitLogger(logLevel string) error {
 // PrintConfig Print all the configuration parameters of the program.
 // For debugging purposes only
 func PrintConfig(v *viper.Viper) {
-	log.Infof("action: config | result: success | client_id: %s | server_address: %s | loop_amount: %v | loop_period: %v | log_level: %s",
+	log.Infof("action: config | result: success | client_id: %s | server_address: %s | server_connect_retries: %d | log_level: %s | batch_max_amount: %v",
 		v.GetString("id"),
 		v.GetString("server.address"),
-		v.GetInt("loop.amount"),
-		v.GetDuration("loop.period"),
+		v.GetInt("server.connect.retries"),
 		v.GetString("log.level"),
+		v.GetInt("batch.maxAmount"),
 	)
 }
 
 func main() {
+	done := make(chan bool, 1)
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGTERM)
+
 	v, err := InitConfig()
 	if err != nil {
 		log.Criticalf("%s", err)
@@ -103,13 +108,29 @@ func main() {
 	// Print program config with debugging purposes
 	PrintConfig(v)
 
+	agency, err := common.NewAgency(v.GetString("id"), "agency.csv")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer agency.Close()
+
 	clientConfig := common.ClientConfig{
-		ServerAddress: v.GetString("server.address"),
-		ID:            v.GetString("id"),
-		LoopAmount:    v.GetInt("loop.amount"),
-		LoopPeriod:    v.GetDuration("loop.period"),
+		ServerAddress:        v.GetString("server.address"),
+		ServerConnectRetries: v.GetInt("server.connect.retries"),
+		ID:                   v.GetString("id"),
+		BatchMaxAmount:       v.GetInt("batch.maxAmount"),
+		BatchMaxSize:         1024 * 8, // 8 KB
 	}
 
-	client := common.NewClient(clientConfig)
-	client.StartClientLoop()
+	client := common.NewClient(clientConfig, agency)
+	go func() {
+		client.StartClientLoop()
+		done <- true
+	}()
+
+	select {
+	case <-signals:
+		client.StopClient()
+	case <-done:
+	}
 }

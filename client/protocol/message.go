@@ -1,0 +1,71 @@
+package protocol
+
+import (
+	"bytes"
+	"encoding/binary"
+	"io"
+)
+
+type Message struct {
+	Data []byte
+}
+
+func WriteFull(w io.Writer, buf []byte) error {
+	total := 0
+	for total < len(buf) {
+		n, err := w.Write(buf[total:])
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return io.ErrShortWrite
+		}
+		total += n
+	}
+	return nil
+}
+
+func (message *Message) WriteTo(w io.Writer) (int64, error) {
+	if err := WriteFull(w, message.Data); err != nil {
+		return 0, err
+	}
+	return int64(len(message.Data)), nil
+}
+
+func ReadMessage(r io.Reader, size int) (*Message, error) {
+	data := make([]byte, size)
+	if _, err := io.ReadFull(r, data); err != nil {
+		return nil, err
+	}
+	return &Message{Data: data}, nil
+}
+
+func (message *Message) ToInt() int {
+	return int(binary.BigEndian.Uint32(message.Data))
+}
+
+func (message *Message) ToString() string {
+	return string(bytes.TrimRight(message.Data, "\x00"))
+}
+
+func ReadInt(r io.Reader) (int, error) {
+	message, err := ReadMessage(r, 4)
+	if err != nil {
+		return 0, err
+	}
+	return message.ToInt(), nil
+}
+
+func ReadString(r io.Reader, length int) (string, error) {
+	message, err := ReadMessage(r, length)
+	if err != nil {
+		return "", err
+	}
+	return message.ToString(), nil
+}
+
+func fixedBytes(s string, length int) []byte {
+	buf := make([]byte, length)
+	copy(buf, s)
+	return buf
+}

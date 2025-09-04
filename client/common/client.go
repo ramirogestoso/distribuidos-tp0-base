@@ -1,11 +1,11 @@
 package common
 
 import (
-	"bufio"
-	"fmt"
+	"io"
 	"net"
 	"time"
 
+	"github.com/7574-sistemas-distribuidos/docker-compose-init/client/protocol"
 	"github.com/op/go-logging"
 )
 
@@ -13,23 +13,26 @@ var log = logging.MustGetLogger("log")
 
 // ClientConfig Configuration used by the client
 type ClientConfig struct {
-	ID            string
-	ServerAddress string
-	LoopAmount    int
-	LoopPeriod    time.Duration
+	ID                   string
+	ServerAddress        string
+	ServerConnectRetries int
+	BatchMaxAmount       int
+	BatchMaxSize         int // in bytes
 }
 
 // Client Entity that encapsulates how
 type Client struct {
 	config ClientConfig
 	conn   net.Conn
+	agency *Agency
 }
 
 // NewClient Initializes a new client receiving the configuration
 // as a parameter
-func NewClient(config ClientConfig) *Client {
+func NewClient(config ClientConfig, agency *Agency) *Client {
 	client := &Client{
 		config: config,
+		agency: agency,
 	}
 	return client
 }
@@ -38,52 +41,112 @@ func NewClient(config ClientConfig) *Client {
 // failure, error is printed in stdout/stderr and exit 1
 // is returned
 func (c *Client) createClientSocket() error {
-	conn, err := net.Dial("tcp", c.config.ServerAddress)
-	if err != nil {
-		log.Criticalf(
-			"action: connect | result: fail | client_id: %v | error: %v",
-			c.config.ID,
-			err,
-		)
+	const retryInterval = 2 * time.Second
+	var retries = c.config.ServerConnectRetries
+	var err error
+	var conn net.Conn
+	for i := 0; i < retries; i++ {
+		conn, err = net.Dial("tcp", c.config.ServerAddress)
+		if err == nil {
+			c.conn = conn
+			return nil
+		}
+		time.Sleep(retryInterval)
 	}
-	c.conn = conn
-	return nil
+	log.Criticalf(
+		"action: connect | result: fail | client_id: %v | error: %v",
+		c.config.ID,
+		err,
+	)
+	return err
 }
 
 // StartClientLoop Send messages to the client until some time threshold is met
 func (c *Client) StartClientLoop() {
-	// There is an autoincremental msgID to identify every message sent
-	// Messages if the message amount threshold has not been surpassed
-	for msgID := 1; msgID <= c.config.LoopAmount; msgID++ {
-		// Create the connection the server in every loop iteration. Send an
-		c.createClientSocket()
+	if err := c.createClientSocket(); err != nil {
+		return
+	}
+	defer c.StopClient()
 
-		// TODO: Modify the send to avoid short-write
-		fmt.Fprintf(
-			c.conn,
-			"[CLIENT %v] Message N°%v\n",
-			c.config.ID,
-			msgID,
-		)
-		msg, err := bufio.NewReader(c.conn).ReadString('\n')
-		c.conn.Close()
+	batch := protocol.NewBatch(c.config.BatchMaxAmount, c.config.BatchMaxSize, c.config.ID)
+	defer batch.Reset()
 
-		if err != nil {
-			log.Errorf("action: receive_message | result: fail | client_id: %v | error: %v",
-				c.config.ID,
-				err,
-			)
+	for {
+		bet, err := c.agency.NextBet()
+		if err != nil && err != io.EOF {
+			logError("next_bet", c.config.ID, err)
 			return
 		}
-
-		log.Infof("action: receive_message | result: success | client_id: %v | msg: %v",
-			c.config.ID,
-			msg,
-		)
-
-		// Wait a time between sending one message and the next one
-		time.Sleep(c.config.LoopPeriod)
-
+		if err == io.EOF || !batch.Fits(bet) {
+			if c.SendBatch(batch) != nil {
+				return
+			}
+			batch.Reset()
+		}
+		if err == io.EOF {
+			break
+		}
+		batch.AddBetIfFits(bet)
 	}
-	log.Infof("action: loop_finished | result: success | client_id: %v", c.config.ID)
+
+	c.GetResults()
+}
+
+func (c *Client) SendBatch(batch *protocol.Batch) error {
+
+	if batch.IsEmpty() {
+		return nil
+	}
+
+	batchMessage := batch.ToMessage()
+	if _, err := batchMessage.WriteTo(c.conn); err != nil {
+		logError("send_message", c.config.ID, err)
+		return err
+	}
+
+	betsReceived, err := protocol.ReadResponse(c.conn)
+	if err != nil {
+		logError("receive_message", c.config.ID, err)
+		return err
+	}
+
+	if betsReceived != batch.Amount() {
+		log.Infof("action: apuesta_recibida | result: fail | cantidad: %d", betsReceived)
+	}
+
+	return nil
+}
+
+func (c *Client) GetResults() error {
+	batchMessage := protocol.NewEmptyBatch(c.config.ID).ToMessage()
+	if _, err := batchMessage.WriteTo(c.conn); err != nil {
+		logError("send_message", c.config.ID, err)
+		return err
+	}
+
+	log.Debugf("action: espera_resultados | result: start")
+
+	// Wait for results
+	winnersDocuments, err := protocol.ReadWinnersDocuments(c.conn)
+	if err != nil {
+		logError("receive_message", c.config.ID, err)
+		return err
+	}
+	log.Infof("action: consulta_ganadores | result: success | cant_ganadores: %d | ganadores: %v", len(winnersDocuments), winnersDocuments)
+	return nil
+}
+
+func logError(action string, client_id string, err error) {
+	log.Errorf("action: %v | result: fail | client_id: %v | error: %v",
+		action,
+		client_id,
+		err,
+	)
+}
+
+// StopClient Stops the client by closing the connection
+func (c *Client) StopClient() {
+	if c.conn != nil {
+		c.conn.Close()
+	}
 }

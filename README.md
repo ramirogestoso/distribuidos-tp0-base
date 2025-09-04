@@ -178,3 +178,397 @@ Se espera que se redacte una sección del README en donde se indique cómo ejecu
 Se proveen [pruebas automáticas](https://github.com/7574-sistemas-distribuidos/tp0-tests) de caja negra. Se exige que la resolución de los ejercicios pase tales pruebas, o en su defecto que las discrepancias sean justificadas y discutidas con los docentes antes del día de la entrega. El incumplimiento de las pruebas es condición de desaprobación, pero su cumplimiento no es suficiente para la aprobación. Respetar las entradas de log planteadas en los ejercicios, pues son las que se chequean en cada uno de los tests.
 
 La corrección personal tendrá en cuenta la calidad del código entregado y casos de error posibles, se manifiesten o no durante la ejecución del trabajo práctico. Se pide a los alumnos leer atentamente y **tener en cuenta** los criterios de corrección informados  [en el campus](https://campusgrado.fi.uba.ar/mod/page/view.php?id=73393).
+
+
+# Resolución de ejercicios
+## Ejercicio 1
+
+Existe un bash script `generar-compose.sh` que recibe:
+- Nombre de archivo de salida YAML
+- Cantidad de clientes a crear
+
+Escribe en el archivo de salida un YAML de docker compose similar al provisto por el esqueleto pero asignando una cantidad especificada de clientes.
+
+Ofrece una ayuda si se usa correctamente o se le pasa un parametro `-h` o `--help`:
+```
+Usage: ./generar-compose.sh <output_filename> <number_of_clients>
+
+Generate a Docker Compose file with a server and specified number of clients.
+
+Arguments:
+  <output_filename>     Path to the output Docker Compose file
+  <number_of_clients>   Number of client services to generate
+
+Example: ./generar-compose.sh docker-compose.yml 3
+```
+
+## Ejercicio 2
+
+A lo desarrollado al ejercicio 1 se bindean los archivos de configuracion a través de volúmenes para que no sean incluidos en la imagen.
+De esta manera, se pueden modificar estos archivos y la imagen no tiene que volver a construirse para que tengan efecto (aunque si es necesario reiniciar).
+
+En cada `.dockerignore` está agregado el archivo de configuración para confirmar que no se utiliza. Además, en el cliente se quitó el `COPY` que pasaba este archivo.
+
+## Ejercicio 3
+
+Existe un bash script `validar-echo-server.sh` que verifica que el servidor funcione correctamente.
+
+Corre un contenedor de docker a partir de la imagen `busybox` conectado a la red definida en el `docker-compose-dev.yaml` llamada `tp0_testing_net` y ejecuta un netcat contra la dirección `server` en el puerto `12345`: `echo "$MSG" | nc server 12345`
+
+El mensaje enviado no es relevante, sino que verificamos que vuelva el mismo desde el servidor.
+
+Fue necesario levantar un contenedor (liviano) para acceder a la red de docker y poder usar su dns para resolver `server`*. Además, no nos interesa exponer el servicio fuera de esa red.
+
+Al finalizar, el contenedor se elimina automaticamente gracias al flag `--rm` de `docker run`.
+
+*Si bien es posible encontrar la ip del servidor a traves de comandos de docker y pegarle desde el host, no es el camino que queremos tomar.
+
+## Ejercicio 4
+
+### Server
+
+En `server.py` agregamos el método `stop` para liberar los recursos utilizados. Para ello agregamos una referencia del socket del cliente actual.
+
+Cuando nos encontramos un error del tipo `OSError` y el servidor está frenado, no propagamos más la excepción.
+
+En `main.py` agregamos un manejador de señales que, por ahora, escucha `SIGTERM` y ejecuta un stop del server.
+
+### Cliente
+
+En `client.go` agregamos el método `StopClient` para liberar los recursos utilizados en ese momento.
+
+En `main.go` agregamos un notificador de señales para avisarnos por medio de un channel cuando llegue una señal `SIGTERM`.
+
+El client loop se ejecutará en una rutina de go, notificando por otro channel cuando termine.
+
+De esta manera:
+- Si el client loop termina exitosamente, el channel `done` se popula y el proceso termina
+- Si llega una señal `SIGTERM` durante el client loop, el channel `signals` se popula y ejecuta un `StopClient` para luego terminar exitosamente
+
+Así ante cada escenario el cliente no termina con errores.
+
+## Ejercicio 5
+
+### Protocolo
+
+Cada apuesta se envia en un chunk de tamaño fijo de 76 bytes.
+
+`|agency|first_name|last_name|document|birth_date|number`
+
+- agency: 4 bytes
+- first_name: 30 bytes
+- last_name: 20 bytes
+- document: 8 bytes
+- birth_date: 10 bytes
+- number: 4 bytes
+
+Se espera que cada uno de ellos sea una cadena de texto de ese tamaño como máximo. El final de la cadena estará marcado con `\x00` para permitir enviar datos mas cortos.
+
+En esta instancia se espera que el cliente envíe solamente una apuesta en la conexión.
+
+#### Flujo
+
+```ascii
++-------------------+                  +-------------------+
+|                   |                  |                   |
+|     CLIENTE       |                  |     SERVIDOR      |
+|                   |                  |                   |
++-------------------+                  |   (LISTEN TCP)    |
++-------------------+                  +-------------------+
+          |                                      |
+          |------------- CONNECT --------------->|
+          |                                      |
+          |---------- ENVIAR(APUESTA) ---------->|
+          |                                      |
+          |                                      |--- RECIBIR_DATOS --->
+          |                                      |--- PARSEAR --------->
+          |                                      |--- STORE_BETS ------>
+          |<---- DEVOLVER(APUESTA RECIBIDA) -----|
+          |                                      |
+          |----------- CERRAR_SOCKET ----------->|
+          |                                      |
+          |<---------- CERRAR_SOCKET ------------|
+          |                                      |
++-------------------+                  +-------------------+
+|   CLIENTE FIN     |                  | SERVIDOR SIGUE EN |
+|                   |                  |      LISTEN       |
++-------------------+                  +-------------------+
+```
+
+## Ejercicio 6
+
+### Protocolo
+
+Cada batch envía un header de 8 bytes indicando la agencia y la cantidad de apuestas:
+- id de agencia (string): 4 bytes
+- cantidad de apuestas (int): 4 bytes
+
+Luego, se lee esa cantidad de apuestas de la misma forma que el protocolo descripto en el ejercicio anterior.
+
+`agency_id|bets_amount|bet_1|bet_2|...|bet_n`
+
+Una vez recibido todo el batch de apuestas, el servidor responde con la cantidad de apuestas procesadas. El cliente por su lado espera ese valor para determinar si fue exitoso.
+
+Esa respuesta es de 4 bytes representando un número entero.
+
+`bets_amount_processed`
+
+Si `bets_amount_processed == bets_amount` entonces fue exitoso. Caso contrario hubo un error.
+
+Luego de procesar el batch, exitosamente o no, ambos cierran la conexión.
+
+El cliente prepará un nuevo batch, el servidor quedará escuchando nuevamente.
+Cuando el batch este listo, puede crear una nueva conexión y enviarlo. Mientras tanto, otros clientes pueden hacer uso del servidor.
+
+### Batch
+
+Respeta un limite de cantidad de apuestas a incluir y un tamaño máximo de batch en bytes.
+
+Las apuestas se agregan al batch hasta que no entran mas. Cuando se alcanza el limite, el cliente las envía al servidor.
+
+### Flujo exitoso
+
+```ascii
++-------------------+                          +-------------------+
+|                   |                          |                   |
+|     CLIENTE       |                          |     SERVIDOR      |
+|                   |                          |                   |
++-------------------+                          |   (LISTEN TCP)    |
++-------------------+                          +-------------------+
+          |                                              |
+          |------------- CONNECT ----------------------->|
+          |                                              |
+          |----- ENVIAR(AGENCY_ID + N + N BETS) -------->|
+          |                                              |--- RECIBIR_DATOS --->
+          |                                              |--- PARSEAR_BATCH ---->
+          |                                              |--- STORE_BETS ------->
+          |<---------- RESPUESTA OK (N) -----------------|
+          |                                              |
+          |----------- CERRAR_SOCKET ------------------->|
+          |                                              |
+          |<---------- CERRAR_SOCKET --------------------|
+          |                                              |
++-------------------+                          +-------------------+
+|   CLIENTE FIN     |                          | SERVIDOR SIGUE EN |
+|                   |                          |      LISTEN       |
++-------------------+                          +-------------------+
+```
+
+### Flujo no exitoso
+```ascii
++-------------------+                          +-------------------+
+|                   |                          |                   |
+|     CLIENTE       |                          |     SERVIDOR      |
+|                   |                          |                   |
++-------------------+                          |   (LISTEN TCP)    |
++-------------------+                          +-------------------+
+          |                                              |
+          |------------- CONNECT ----------------------->|
+          |                                              |
+          |------ ENVIAR(AGENCY_ID + N + N BETS) ------->|
+          |                                              |--- RECIBIR_DATOS --->
+          |                                              |--- PARSEAR_BATCH ---->
+          |                                              |--- STORE_BETS (FALLA) ->
+          |<---------- RESPUESTA NO OK (M=0) ------------|
+          |                                              |
+          |----------- CERRAR_SOCKET ------------------->|
+          |                                              |
+          |<---------- CERRAR_SOCKET --------------------|
+          |                                              |
++-------------------+                          +-------------------+
+| CLIENTE DETECTA   |                          | SERVIDOR SIGUE EN |
+|   ERROR (M != N)  |                          |      LISTEN       |
++-------------------+                          +-------------------+
+```
+
+## Ejercicio 7
+
+### Protocolo
+
+El protocolo extiende el del **Ejercicio 6**.  
+
+- Cada cliente envía sus batches de apuestas como en el Ejercicio 6.  
+- Cuando un cliente termina de enviar todos sus batches, envía un **batch vacío**.  
+  - Esto indica al servidor que ya no enviará más apuestas.  
+  - Luego, el cliente se queda esperando la lista de documentos ganadores de su agencia.  
+
+- El servidor interpreta un batch vacío como **fin de apuestas de ese cliente**.  
+  - Mantiene el socket abierto mientras espera a que todos los clientes terminen.  
+  - Conoce la cantidad total de clientes esperados.  
+
+- Cuando todos los clientes han indicado fin de apuestas:  
+  1. El servidor procesa todas las apuestas ganadoras.  
+  2. Envía a cada cliente la lista de documentos ganadores de su agencia.  
+     - Si un cliente no tiene ganadores, igualmente se le envía una lista vacía.  
+  3. Cada cliente cierra su socket después de recibir el resultado final.  
+  4. El servidor cierra los sockets de los clientes y reinicia el sorteo.
+
+#### Resultado de ganadores
+`winners_count|document_1|document_2|...|document_n|`
+
+- winners_count: 4 bytes indicando la cantidad de documentos ganadores
+- document_1, document_2, ..., document_n: identificadores de los documentos ganadores
+  - cada uno de 8 bytes
+
+---
+
+### Flujo cliente → servidor (envío de batchs y fin de apuestas)
+
+```ascii
++-------------------+                          +-------------------+
+|                   |                          |                   |
+|     CLIENTE       |                          |     SERVIDOR      |
+|                   |                          |                   |
++-------------------+                          |   (LISTEN TCP)    |
++-------------------+                          +-------------------+
+          |                                              |
+          |------------- CONNECT ----------------------->|
+          |                                              |
+          |----------- ENVIAR(BATCH 1) ----------------->|
+          |                  ...                         |
+          |----------- ENVIAR(BATCH N) ----------------->|
+          |                  ...                         |
+          |----------- ENVIAR(BATCH VACIO) ------------->|
+          |                                              |
+          |<---------- DOCUMENTOS GANADORES -------------|
+          |<---------- CERRAR_SOCKET --------------------|
+          |----------- CERRAR_SOCKET ------------------->|
+          |                                              |
++-------------------+                          +-------------------+
+| CLIENTE FIN       |                          | SERVIDOR SIGUE EN |
+|                   |                          |      LISTEN       |
+|                   |                          |                   |
++-------------------+                          +-------------------+
+```
+
+### Flujo servidor interno (espera a todos los clientes)
+```ascii
++-------------------+
+|   SERVIDOR        |
+|                   |
+|   (LISTEN TCP)    |
++-------------------+
+          |
+          |--- RECIBE BATCH DE CADA CLIENTE ---------|
+          |--- PARSEAR Y ALMACENAR BATCHS -----------|
+          |--- CLIENTE ENVIA BATCH VACIO ------------| (marca cliente como "terminado")
+          |               ...                        |
+          |--- CUANDO TODOS LOS CLIENTES TERMINAN ---|
+          |--- PROCESAR APUESTAS GANADORAS ----------|
+          |--- ENVIAR DOCUMENTOS GANADORES A C/U ----|
+          |--- CERRAR SOCKETS DE CLIENTES -----------|
+          |--- REINICIAR SORTEO ---------------------|
+```
+
+
+# Resumen protocolo
+
+## Mensajes
+### Cliente → Servidor
+- BATCH
+- BATCH VACIO
+
+#### Batch
+`agency_id|bets_amount|bet_1|bet_2|...|bet_n`
+- agency_id: 4 bytes
+- bets_amount: 4 bytes
+- bet_i: 72 bytes
+  - first_name: 30 bytes
+  - last_name: 20 bytes
+  - document: 8 bytes
+  - birth_date: 10 bytes
+  - number: 4 bytes
+
+### Servidor → Cliente
+- CODE MESSAGE
+- DOCUMENTOS GANADORES
+
+#### Code Message
+`code`
+- code: 4 bytes
+
+Usado para indicar la cantidad de apuestas recibidas de un cliente
+
+#### Documentos ganadores
+`winners_count|document_1|document_2|...|document_n|`
+- winners_count: 4 bytes
+- document_i: 8 bytes
+
+## Ejercicio 8
+
+### Cambios respecto al protocolo
+El protocolo definido en el **Ejercicio 7** no sufre modificaciones en el formato de mensajes.  
+Los mensajes entre cliente y servidor siguen siendo los mismos:  
+- `BATCH`
+- `BATCH VACIO`
+- `CODE MESSAGE`
+- `DOCUMENTOS GANADORES`
+
+### Cambios en el flujo
+- Ahora **la conexión cliente-servidor se mantiene abierta durante todo el proceso**.  
+  - Ya no se cierra después de cada batch como ocurría antes.  
+  - El socket solo se cierra una vez que el servidor envía los resultados del sorteo. 
+    - O cuando ocurren errores de comunicación. 
+
+- El cliente envía **múltiples batches en loop** dentro de la misma conexión.  
+  - Cuando no tiene más apuestas, envía un **batch vacío**.  
+  - Esto marca el fin de sus apuestas, pero la conexión permanece abierta hasta que todos los clientes terminen y se ejecute el sorteo.  
+  - Un cliente que se desconecta, puede volver a conectarse y continuar enviando batches.
+
+### Concurrencia en el servidor
+La implementación del servidor ahora es concurrente:
+
+- Cada nueva conexión aceptada se atiende en un **thread independiente**.  
+- Esto permite que múltiples clientes puedan enviar apuestas y batches de forma simultánea.  
+
+#### Acceso concurrente a las apuestas
+El servidor guarda todas las apuestas recibidas mediante la función `store_bets`.  
+- Para evitar condiciones de carrera, se utiliza un **lock (`_store_bets_lock`)**.  
+- Esto garantiza que las escrituras al almacenamiento se realicen de manera atómica y no se mezclen datos de diferentes clientes.
+
+#### Coordinación del sorteo
+El sorteo debe ejecutarse **una sola vez** cuando todos los clientes enviaron un batch vacío.  
+- Se utiliza un **lock (`_waiting_clients_lock`)** para proteger la estructura `_waiting_clients_sockets`.  
+  - Esta estructura almacena los sockets de los clientes que ya enviaron su batch vacío.
+- Cuando el número de clientes que marcaron fin alcanza `clients_count`, el último thread en marcar su socket como "terminado" dispara el sorteo.  
+- Solo en ese momento:
+  - Se procesan todas las apuestas.  
+  - Se envía a cada cliente la lista de ganadores de su agencia.  
+  - Luego se cierran las conexiones.  
+
+### Flujo concurrente (con loop de batches)
+
+```ascii
++-------------------+                          +-------------------+
+|                   |                          |                   |
+|   CLIENTES (N)    |                          |     SERVIDOR      |
+|                   |                          |  (THREAD POR CTE) |
++-------------------+                          +-------------------+
+          |                                              |
+          |------------- CONEXIONES EN PARALELO -------->|
+          |                                              |
+   (loop) |--- CLIENTE i ENVIAR BATCH ------------------>|--- RECIBIR_BATCH --->
+          |                                              |--- ADQUIRIR LOCK STORE_BETS -|
+          |                                              |--- STORE_BETS ---------->
+          |                                              |--- LIBERAR LOCK STORE_BETS --|
+          |<--- RESPUESTA (CODE MESSAGE) ----------------|
+          |                                              |
+   (loop) |--- CLIENTE i ENVIAR OTRO BATCH ------------->|
+          |<--- RESPUESTA (CODE MESSAGE) ----------------|
+          |                  ...                         |
+          |--- ENVIAR BATCH VACÍO ---------------------->|
+          |                                              |--- THREAD REGISTRA CLIENTE --->
+          |                                              |   (lock en waiting_clients)  
+          |                                              |--- SI TODOS TERMINARON --------|
+          |                                              |       --- LEER APUESTAS GANADORAS ---->  
+          |                                              |       --- ENVIAR DOCUMENTOS GANADORES -->
+          |                                              |--- LIBERAR LOCK WAITING_CLIENTS -------|
+          |                                              |
+          |<---- DOCUMENTOS GANADORES -------------------|
+          |                                              |
+          |<---------- CERRAR_SOCKET ------------------->|
+          |                                              |
++-------------------+                          +-------------------+
+| CLIENTES FIN      |                          | SERVIDOR SIGUE EN |
+|                   |                          |      LISTEN       |
++-------------------+                          +-------------------+
