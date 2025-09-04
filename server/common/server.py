@@ -1,3 +1,4 @@
+from collections import defaultdict
 import socket
 import logging
 import threading
@@ -26,14 +27,6 @@ class Server:
         self._sockets.append(self._server_socket)
 
     def run(self):
-        """
-        Dummy Server loop
-
-        Server that accept a new connections and establishes a
-        communication with a client. After client with communucation
-        finishes, servers starts to accept new connections again
-        """
-
         while self._running:
             try:
                 client_sock = self.__accept_new_connection()
@@ -49,10 +42,12 @@ class Server:
 
     def __handle_client(self, client_sock):
         """
-        Read message from a specific client socket and closes the socket
+        Handle communication with a specific client
 
-        If a problem arises in the communication with the client, the
-        client socket will also be closed
+        This function is executed in a separate thread for each client
+        connection.
+
+        Reads all bets from the client and tries to play the lottery at the end
         """
         try:
             agency = self.__read_and_save_agency_bets(client_sock)
@@ -62,16 +57,19 @@ class Server:
             self.__try_send_code(client_sock, 0)
 
     def __read_and_save_agency_bets(self, client_sock):
-        bets = []
-        more_bets = True
-        agency = None
-        while more_bets:
-            bets, agency = BatchMessage.read_bets(client_sock)
-            if not bets: break
+        """
+        Reads all bets from the client socket
 
+        Stores the bets in a shared file
+
+        Returns the agency associated with the bets
+        """
+        bets, agency = BatchMessage.read_bets(client_sock)
+        while bets:
             self.__store_bets(bets)
             logging.info(f'action: apuesta_recibida | result: success | cantidad: {len(bets)} | agency: {agency}')
             self.__try_send_code(client_sock, len(bets))
+            bets, agency = BatchMessage.read_bets(client_sock)
 
         return agency
 
@@ -86,23 +84,31 @@ class Server:
             self.__close_socket(client_sock)
 
     def __try_to_play_lottery(self, agency, client_sock):
+        """
+        Tries to play the lottery if all agencies are waiting
+        """
         with self._waiting_clients_lock:
             self._waiting_clients_sockets[int(agency)] = client_sock
             if len(self._waiting_clients_sockets) == self._clients_count: # only last agency triggers lottery
                 self.__play_lottery()
 
     def __play_lottery(self):
-        winner_bets = [bet for bet in load_bets() if has_won(bet)]
-        winners_by_agency = dict()
+        """
+        Plays the lottery for all waiting agencies
 
-        for agency in self._waiting_clients_sockets.keys():
-            winners_by_agency[agency] = set()
+        Sends the results to the respective clients
+
+        Then connections are closed
+        """
+        winner_bets = [bet for bet in load_bets() if has_won(bet)]
+        
+        winners_by_agency = defaultdict(set)
 
         for bet in winner_bets:
             winners_by_agency[bet.agency].add(bet.document)
 
-        for agency, documents in winners_by_agency.items():
-            client_sock = self._waiting_clients_sockets[agency]
+        for agency, client_sock in self._waiting_clients_sockets.items():
+            documents = winners_by_agency.get(agency, set())
             try: LotteryResultMessage(documents).write_to(client_sock)
             finally: self.__close_socket(client_sock)
 
@@ -131,11 +137,10 @@ class Server:
 
     def stop(self):
         """
-        Stops the server
+        Stops the server gracefully
         """
         self._running = False
         for sock in self._sockets:
-            self.__close_socket(sock)
-
+            sock.close()
         for t in self._threads:
             t.join()
