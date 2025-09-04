@@ -44,8 +44,9 @@ func (c *Client) createClientSocket() error {
 	const retryInterval = 2 * time.Second
 	var retries = c.config.ServerConnectRetries
 	var err error
+	var conn net.Conn
 	for i := 0; i < retries; i++ {
-		conn, err := net.Dial("tcp", c.config.ServerAddress)
+		conn, err = net.Dial("tcp", c.config.ServerAddress)
 		if err == nil {
 			c.conn = conn
 			return nil
@@ -62,7 +63,9 @@ func (c *Client) createClientSocket() error {
 
 // StartClientLoop Send messages to the client until some time threshold is met
 func (c *Client) StartClientLoop() {
-	c.createClientSocket()
+	if err := c.createClientSocket(); err != nil {
+		return
+	}
 	defer c.StopClient()
 
 	batch := protocol.NewBatch(c.config.BatchMaxAmount, c.config.BatchMaxSize, c.config.ID)
