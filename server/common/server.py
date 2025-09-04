@@ -83,13 +83,13 @@ class Server:
             # delegate this to an async queue
             store_bets(bets)
             logging.info(f'action: apuesta_recibida | result: success | cantidad: {len(bets)} | agency: {agency}')
-            CodeMessage(len(bets)).write_to(client_sock)
+            self.__try_send_code(client_sock, len(bets))
         except OSError as e:
             logging.error(f"action: apuesta_recibida | result: fail | cantidad: {len(bets)} | error: {e}")
-            self.__try_send_error_code(client_sock)
+            self.__try_send_code(client_sock, 0)
 
-    def __try_send_error_code(self, client_sock):
-        try: CodeMessage(0).write_to(client_sock)
+    def __try_send_code(self, client_sock, code):
+        try: CodeMessage(code).write_to(client_sock)
         except OSError as e: 
             logging.warning(f"No se pudo enviar CodeMessage: {e}")
             self.__close_client_socket(client_sock)
