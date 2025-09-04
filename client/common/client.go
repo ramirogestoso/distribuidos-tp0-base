@@ -70,21 +70,18 @@ func (c *Client) StartClientLoop() {
 
 	for {
 		bet, err := c.agency.NextBet()
-		if err == io.EOF {
-			if c.SendBatch(batch) != nil {
-				return
-			}
-			break
-		}
-		if err != nil {
+		if err != nil && err != io.EOF {
 			logError("next_bet", c.config.ID, err)
 			return
 		}
-		if !batch.Fits(bet) {
+		if err == io.EOF || !batch.Fits(bet) {
 			if c.SendBatch(batch) != nil {
 				return
 			}
 			batch.Reset()
+		}
+		if err == io.EOF {
+			break
 		}
 		if err := batch.AddBet(bet); err != nil {
 			logError("add_bet", c.config.ID, err)
