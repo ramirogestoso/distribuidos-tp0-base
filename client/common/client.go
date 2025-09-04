@@ -71,7 +71,9 @@ func (c *Client) StartClientLoop() {
 	for {
 		bet, err := c.agency.NextBet()
 		if err == io.EOF {
-			c.SendBatch(batch)
+			if c.SendBatch(batch) != nil {
+				return
+			}
 			break
 		}
 		if err != nil {
@@ -79,7 +81,9 @@ func (c *Client) StartClientLoop() {
 			return
 		}
 		if !batch.Fits(bet) {
-			c.SendBatch(batch)
+			if c.SendBatch(batch) != nil {
+				return
+			}
 			batch.Reset()
 		}
 		if err := batch.AddBet(bet); err != nil {
