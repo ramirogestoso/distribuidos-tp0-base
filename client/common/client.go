@@ -83,10 +83,7 @@ func (c *Client) StartClientLoop() {
 		if err == io.EOF {
 			break
 		}
-		if err := batch.AddBet(bet); err != nil {
-			logError("add_bet", c.config.ID, err)
-			return
-		}
+		batch.AddBetIfFits(bet)
 	}
 
 	c.GetResults()

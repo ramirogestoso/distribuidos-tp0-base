@@ -3,7 +3,6 @@ package protocol
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"io"
 )
 
@@ -26,12 +25,11 @@ func NewBatch(maxAmount int, maxSize int, agency string) *Batch {
 	}
 }
 
-func (b *Batch) AddBet(bet *Bet) error {
+func (b *Batch) AddBetIfFits(bet *Bet) {
 	if !b.Fits(bet) {
-		return fmt.Errorf("batch size exceeded")
+		return
 	}
 	b.Bets = append(b.Bets, *bet)
-	return nil
 }
 
 func (b *Batch) Fits(bet *Bet) bool {
