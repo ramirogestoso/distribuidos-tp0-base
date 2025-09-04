@@ -1,6 +1,6 @@
 import socket
 import logging
-from select import select
+import threading
 
 from protocol.message import BatchMessage, CodeMessage, LotteryResultMessage
 from common.utils import has_won, load_bets, store_bets
@@ -13,6 +13,8 @@ class Server:
         self._running = True
         self._clients_count = clients_count
         self._waiting_clients_sockets = dict()  # Map of agency to client socket
+        self._threads = []
+        self._bets_lock = threading.Lock()
 
     def __initialize_server_socket(self, port, listen_backlog):
         self._server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -31,16 +33,10 @@ class Server:
 
         while self._running:
             try:
-                if len(self._waiting_clients_sockets) >= self._clients_count:
-                    self.__lottery()
- 
-                read_sockets, _, exception_sockets = select(self._sockets, [], self._sockets)
-                for sock in read_sockets:
-                    if sock == self._server_socket: self.__accept_new_connection()
-                    else: self.__handle_client_connection(sock)
-                
-                for sock in exception_sockets:
-                    self.__close_client_socket(sock)
+                client_sock = self.__accept_new_connection()
+                t = threading.Thread(target=self.__handle_client_connection, args=(client_sock,))
+                t.start()
+                self._threads.append(t)
 
             except OSError:
                if not self._running: break
@@ -76,17 +72,25 @@ class Server:
         """
         bets = []
         try:
-            bets, agency = BatchMessage.read_bets(client_sock)
-            if not bets:
-                self._waiting_clients_sockets[int(agency)] = client_sock
-                return
-            # delegate this to an async queue
-            store_bets(bets)
-            logging.info(f'action: apuesta_recibida | result: success | cantidad: {len(bets)} | agency: {agency}')
-            self.__try_send_code(client_sock, len(bets))
+            while True:
+                bets, agency = BatchMessage.read_bets(client_sock)
+                with self._bets_lock:
+                    if not bets:
+                        self._waiting_clients_sockets[int(agency)] = client_sock
+                        self.__try_to_lottery()
+                        return
+                    else:
+                        store_bets(bets)
+                logging.info(f'action: apuesta_recibida | result: success | cantidad: {len(bets)} | agency: {agency}')
+                self.__try_send_code(client_sock, len(bets))
         except OSError as e:
             logging.error(f"action: apuesta_recibida | result: fail | cantidad: {len(bets)} | error: {e}")
             self.__try_send_code(client_sock, 0)
+
+    def __try_to_lottery(self):
+        if len(self._waiting_clients_sockets) >= self._clients_count:
+            self.__lottery()
+        
 
     def __try_send_code(self, client_sock, code):
         try: CodeMessage(code).write_to(client_sock)
@@ -116,3 +120,6 @@ class Server:
         self._running = False
         for sock in self._sockets:
             sock.close()
+
+        for t in self._threads:
+            t.join()
