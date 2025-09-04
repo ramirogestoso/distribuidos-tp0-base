@@ -86,7 +86,13 @@ class Server:
             CodeMessage(len(bets)).write_to(client_sock)
         except OSError as e:
             logging.error(f"action: apuesta_recibida | result: fail | cantidad: {len(bets)} | error: {e}")
-            CodeMessage(0).write_to(client_sock)
+            self.__try_send_error_code(client_sock)
+
+    def __try_send_error_code(self, client_sock):
+        try: CodeMessage(0).write_to(client_sock)
+        except OSError as e: 
+            logging.warning(f"No se pudo enviar CodeMessage: {e}")
+            self.__close_client_socket(client_sock)
 
     def __accept_new_connection(self):
         """
