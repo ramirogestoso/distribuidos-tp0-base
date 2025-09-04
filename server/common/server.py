@@ -114,6 +114,5 @@ class Server:
         Stops the server
         """
         self._running = False
-        self._server_socket.close()
         for sock in self._sockets:
             sock.close()
