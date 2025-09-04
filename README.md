@@ -493,3 +493,82 @@ Usado para indicar la cantidad de apuestas recibidas de un cliente
 `winners_count|document_1|document_2|...|document_n|`
 - winners_count: 4 bytes
 - document_i: 8 bytes
+
+## Ejercicio 8
+
+### Cambios respecto al protocolo
+El protocolo definido en el **Ejercicio 7** no sufre modificaciones en el formato de mensajes.  
+Los mensajes entre cliente y servidor siguen siendo los mismos:  
+- `BATCH`
+- `BATCH VACIO`
+- `CODE MESSAGE`
+- `DOCUMENTOS GANADORES`
+
+### Cambios en el flujo
+- Ahora **la conexión cliente-servidor se mantiene abierta durante todo el proceso**.  
+  - Ya no se cierra después de cada batch como ocurría antes.  
+  - El socket solo se cierra una vez que el servidor envía los resultados del sorteo. 
+    - O cuando ocurren errores de comunicación. 
+
+- El cliente envía **múltiples batches en loop** dentro de la misma conexión.  
+  - Cuando no tiene más apuestas, envía un **batch vacío**.  
+  - Esto marca el fin de sus apuestas, pero la conexión permanece abierta hasta que todos los clientes terminen y se ejecute el sorteo.  
+  - Un cliente que se desconecta, puede volver a conectarse y continuar enviando batches.
+
+### Concurrencia en el servidor
+La implementación del servidor ahora es concurrente:
+
+- Cada nueva conexión aceptada se atiende en un **thread independiente**.  
+- Esto permite que múltiples clientes puedan enviar apuestas y batches de forma simultánea.  
+
+#### Acceso concurrente a las apuestas
+El servidor guarda todas las apuestas recibidas mediante la función `store_bets`.  
+- Para evitar condiciones de carrera, se utiliza un **lock (`_store_bets_lock`)**.  
+- Esto garantiza que las escrituras al almacenamiento se realicen de manera atómica y no se mezclen datos de diferentes clientes.
+
+#### Coordinación del sorteo
+El sorteo debe ejecutarse **una sola vez** cuando todos los clientes enviaron un batch vacío.  
+- Se utiliza un **lock (`_waiting_clients_lock`)** para proteger la estructura `_waiting_clients_sockets`.  
+  - Esta estructura almacena los sockets de los clientes que ya enviaron su batch vacío.
+- Cuando el número de clientes que marcaron fin alcanza `clients_count`, el último thread en marcar su socket como "terminado" dispara el sorteo.  
+- Solo en ese momento:
+  - Se procesan todas las apuestas.  
+  - Se envía a cada cliente la lista de ganadores de su agencia.  
+  - Luego se cierran las conexiones.  
+
+### Flujo concurrente (con loop de batches)
+
+```ascii
++-------------------+                          +-------------------+
+|                   |                          |                   |
+|   CLIENTES (N)    |                          |     SERVIDOR      |
+|                   |                          |  (THREAD POR CTE) |
++-------------------+                          +-------------------+
+          |                                              |
+          |------------- CONEXIONES EN PARALELO -------->|
+          |                                              |
+   (loop) |--- CLIENTE i ENVIAR BATCH ------------------>|--- RECIBIR_BATCH --->
+          |                                              |--- ADQUIRIR LOCK STORE_BETS -|
+          |                                              |--- STORE_BETS ---------->
+          |                                              |--- LIBERAR LOCK STORE_BETS --|
+          |<--- RESPUESTA (CODE MESSAGE) ----------------|
+          |                                              |
+   (loop) |--- CLIENTE i ENVIAR OTRO BATCH ------------->|
+          |<--- RESPUESTA (CODE MESSAGE) ----------------|
+          |                  ...                         |
+          |--- ENVIAR BATCH VACÍO ---------------------->|
+          |                                              |--- THREAD REGISTRA CLIENTE --->
+          |                                              |   (lock en waiting_clients)  
+          |                                              |--- SI TODOS TERMINARON --------|
+          |                                              |       --- LEER APUESTAS GANADORAS ---->  
+          |                                              |       --- ENVIAR DOCUMENTOS GANADORES -->
+          |                                              |--- LIBERAR LOCK WAITING_CLIENTS -------|
+          |                                              |
+          |<---- DOCUMENTOS GANADORES -------------------|
+          |                                              |
+          |<---------- CERRAR_SOCKET ------------------->|
+          |                                              |
++-------------------+                          +-------------------+
+| CLIENTES FIN      |                          | SERVIDOR SIGUE EN |
+|                   |                          |      LISTEN       |
++-------------------+                          +-------------------+
