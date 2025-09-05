@@ -94,7 +94,7 @@ func PrintConfig(v *viper.Viper) {
 func main() {
 	done := make(chan bool, 1)
 	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGTERM)
+	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
 
 	v, err := InitConfig()
 	if err != nil {
